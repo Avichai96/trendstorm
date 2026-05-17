@@ -1,0 +1,358 @@
+# ==============================================================================
+# TrendStorm AI — Core Stack
+# ==============================================================================
+# Brings up the data plane (Mongo, Kafka, Redis, Chroma, MinIO) and LLM plane
+# (Ollama). Observability lives in docker-compose.obs.yml (overlay).
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml up -d
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.obs.yml up -d
+# ==============================================================================
+
+name: trendstorm
+
+networks:
+  trendstorm:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  mongo-config:
+  kafka-data:
+  redis-data:
+  chroma-data:
+  minio-data:
+  ollama-data:
+
+# ==============================================================================
+# Reusable healthcheck snippet
+# ==============================================================================
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 10s
+  timeout: 5s
+  retries: 10
+  start_period: 30s
+
+services:
+
+  # ============================================================================
+  # MongoDB — single-node replica set
+  # ----------------------------------------------------------------------------
+  # Why replica set in dev?
+  #   - LangGraph's Mongo checkpointer uses transactions; Mongo requires a
+  #     replica set for transactions.
+  #   - Change streams (for future event sourcing features) require it too.
+  #   - Mirrors production topology: prod will be a 3-node replica set.
+  # Why a single node here? Resource efficiency on a dev machine; the API
+  # surface and failure modes are identical to a multi-node RS for our code.
+  # ============================================================================
+  mongo:
+    image: mongo:7.0
+    container_name: trendstorm-mongo
+    restart: unless-stopped
+    command:
+      - "--replSet"
+      - "rs0"
+      - "--bind_ip_all"
+      - "--keyFile"
+      - "/etc/mongo/keyfile"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpass
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+      - ./config/mongo/keyfile:/etc/mongo/keyfile:ro
+    ports:
+      - "27017:27017"
+    networks:
+      - trendstorm
+    healthcheck:
+      # `mongosh --eval "db.adminCommand('ping')"` returns immediately once mongod is up.
+      # We don't check rs.status() here because mongo-init handles RS initiation.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok", "--username", "root", "--password", "rootpass", "--authenticationDatabase", "admin"]
+      <<: *healthcheck-defaults
+
+  # ----------------------------------------------------------------------------
+  # mongo-init: one-shot container that initiates the replica set.
+  # Runs `rs.initiate()` once, then exits. Idempotent: re-running is a no-op
+  # because `rs.initiate()` errors if the RS already exists (we catch this).
+  # ----------------------------------------------------------------------------
+  mongo-init:
+    image: mongo:7.0
+    container_name: trendstorm-mongo-init
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - trendstorm
+    entrypoint:
+      - bash
+      - -c
+      - |
+        echo "Waiting for mongod to accept connections..."
+        until mongosh --host mongo:27017 --username root --password rootpass --authenticationDatabase admin --eval "db.adminCommand('ping')" >/dev/null 2>&1; do
+          sleep 1
+        done
+        echo "Initiating replica set..."
+        mongosh --host mongo:27017 --username root --password rootpass --authenticationDatabase admin <<EOF
+        try {
+          rs.initiate({
+            _id: "rs0",
+            members: [{ _id: 0, host: "mongo:27017" }]
+          });
+          print("Replica set initiated.");
+        } catch (e) {
+          if (e.codeName === "AlreadyInitialized") {
+            print("Replica set already initialized — OK.");
+          } else {
+            print("Error: " + e);
+            quit(1);
+          }
+        }
+        EOF
+        echo "Waiting for PRIMARY..."
+        until mongosh --host mongo:27017 --username root --password rootpass --authenticationDatabase admin --quiet --eval "rs.status().myState" | grep -q "^1$$"; do
+          sleep 1
+        done
+        echo "MongoDB replica set is ready."
+    restart: "no"
+
+  # ============================================================================
+  # Kafka — KRaft mode (no Zookeeper)
+  # ----------------------------------------------------------------------------
+  # Why KRaft?
+  #   - Zookeeper is deprecated as of Kafka 3.5+.
+  #   - One less moving part; one less StatefulSet in prod.
+  #   - Faster controller failover.
+  # Why two listeners (PLAINTEXT + PLAINTEXT_HOST)?
+  #   - PLAINTEXT (kafka:9092) is for in-network clients (other containers).
+  #   - PLAINTEXT_HOST (localhost:29092) is for clients running on your host
+  #     machine (your IDE, debugging tools).
+  #   - This is the #1 source of "Kafka works in Docker, breaks from my laptop"
+  #     confusion. Always configure both.
+  # ============================================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: trendstorm-kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"     # In-network advertised port (Docker DNS resolves "kafka")
+      - "29092:29092"   # Host-facing port
+    environment:
+      # KRaft mode
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      # Cluster ID must be a valid UUID; this one is fixed for dev reproducibility
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      # Single-node specific
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"   # Force explicit topic creation
+      # JVM tuning for laptop-friendliness
+      KAFKA_HEAP_OPTS: "-Xmx512m -Xms256m"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - trendstorm
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      <<: *healthcheck-defaults
+
+  # ----------------------------------------------------------------------------
+  # kafka-init: creates all topics declared in the Phase 1 design.
+  # Idempotent — `--if-not-exists` flag.
+  # ----------------------------------------------------------------------------
+  kafka-init:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: trendstorm-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - trendstorm
+    entrypoint:
+      - bash
+      - -c
+      - |
+        BOOTSTRAP="kafka:9092"
+        create_topic() {
+          local name=$$1; local parts=$$2; local retention_ms=$$3
+          kafka-topics --bootstrap-server $$BOOTSTRAP \
+            --create --if-not-exists \
+            --topic "$$name" \
+            --partitions "$$parts" \
+            --replication-factor 1 \
+            --config retention.ms=$$retention_ms \
+            --config compression.type=lz4
+          echo "Topic ready: $$name (partitions=$$parts, retention_ms=$$retention_ms)"
+        }
+        # Main pipeline topics
+        create_topic trendstorm.jobs.requested.v1        12 604800000   # 7d
+        create_topic trendstorm.ingest.pending.v1        24 259200000   # 3d
+        create_topic trendstorm.ingest.completed.v1      24 604800000
+        create_topic trendstorm.knowledge.pending.v1     12 259200000
+        create_topic trendstorm.knowledge.completed.v1   12 604800000
+        create_topic trendstorm.analysis.pending.v1       6 259200000
+        create_topic trendstorm.analysis.completed.v1     6 604800000
+        create_topic trendstorm.publish.pending.v1        6 259200000
+        create_topic trendstorm.stream.partial.v1        24  86400000   # 1d
+        # Evaluation sampling
+        create_topic trendstorm.eval.sample.v1            3 2592000000  # 30d — low volume, long retention for backlog
+        # Retry topics (one per stage)
+        create_topic trendstorm.retry.ingest.30s.v1      24  86400000
+        create_topic trendstorm.retry.ingest.5m.v1       24  86400000
+        create_topic trendstorm.retry.ingest.1h.v1       24  86400000
+        create_topic trendstorm.retry.knowledge.30s.v1   12  86400000
+        create_topic trendstorm.retry.knowledge.5m.v1    12  86400000
+        create_topic trendstorm.retry.knowledge.1h.v1    12  86400000
+        create_topic trendstorm.retry.analysis.30s.v1     6  86400000
+        create_topic trendstorm.retry.analysis.5m.v1      6  86400000
+        create_topic trendstorm.retry.analysis.1h.v1      6  86400000
+        # DLQ
+        create_topic trendstorm.dlq.v1                    6 2592000000  # 30d
+        echo "All Kafka topics created."
+    restart: "no"
+
+  # ============================================================================
+  # Redis — caching + semantic cache backing store
+  # ----------------------------------------------------------------------------
+  # AOF (append-only file) is on for durability that mirrors prod.
+  # In prod we'd run Redis Sentinel or Cluster; locally a single node is fine.
+  # ============================================================================
+  redis:
+    image: redis:7.4-alpine
+    container_name: trendstorm-redis
+    restart: unless-stopped
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--maxmemory"
+      - "512mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - trendstorm
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      <<: *healthcheck-defaults
+
+  # ============================================================================
+  # ChromaDB — vector store for Phase 1; pluggable for Pinecone later
+  # ============================================================================
+  chroma:
+    image: chromadb/chroma:0.5.20
+    container_name: trendstorm-chroma
+    restart: unless-stopped
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "FALSE"
+      CHROMA_SERVER_CORS_ALLOW_ORIGINS: '["*"]'
+    volumes:
+      - chroma-data:/chroma/chroma
+    ports:
+      - "8000:8000"
+    networks:
+      - trendstorm
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "cat < /dev/tcp/localhost/8000"]
+      <<: *healthcheck-defaults
+
+  # ============================================================================
+  # MinIO — S3-compatible blob storage
+  # ----------------------------------------------------------------------------
+  # Used for raw HTML/PDFs (too large for MongoDB) and generated reports.
+  # In production this is replaced by S3 / GCS / Azure Blob — same API.
+  # ============================================================================
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    container_name: trendstorm-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"    # S3 API
+      - "9001:9001"    # Web console
+    networks:
+      - trendstorm
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      <<: *healthcheck-defaults
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-10-08T09-37-26Z
+    container_name: trendstorm-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - trendstorm
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 minioadmin minioadmin
+        mc mb --ignore-existing local/trendstorm-raw
+        mc mb --ignore-existing local/trendstorm-reports
+        mc anonymous set download local/trendstorm-reports
+        echo "MinIO buckets ready."
+    restart: "no"
+
+  # ============================================================================
+  # Ollama — local LLM inference
+  # ----------------------------------------------------------------------------
+  # Hosts cheap/small models for tasks where LLM quality is not paramount
+  # (e.g. metadata extraction, classification, query expansion).
+  # Models are pulled by `ollama-init` on first start.
+  # ============================================================================
+  ollama:
+    image: ollama/ollama:0.4.4
+    container_name: trendstorm-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - trendstorm
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      <<: *healthcheck-defaults
+
+  ollama-init:
+    image: ollama/ollama:0.4.4
+    container_name: trendstorm-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - trendstorm
+    entrypoint:
+      - sh
+      - -c
+      - |
+        export OLLAMA_HOST=http://ollama:11434
+        echo "Pulling small chat model..."
+        ollama pull llama3.2:3b
+        echo "Pulling embedding model..."
+        ollama pull nomic-embed-text
+        echo "Ollama models ready."
+    restart: "no"

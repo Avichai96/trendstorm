@@ -1,0 +1,54 @@
+# ==============================================================================
+# TrendStorm AI — .gitignore
+# ==============================================================================
+
+# --- Secrets ---
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+docker/config/mongo/keyfile
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.eggs/
+*.egg-info/
+*.egg
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# --- IDE ---
+.idea/
+# .vscode/ is intentionally committed (team settings).
+# Personal overrides go in .vscode/*.local.json or .vscode/*.local (gitignored by .vscode/.gitignore).
+.vscode/*.local.json
+.vscode/*.local
+*.swp
+*.swo
+.DS_Store
+
+# --- Docker volumes (when bind-mounted) ---
+docker/data/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Local tool outputs ---
+*.tmp
+.cache/

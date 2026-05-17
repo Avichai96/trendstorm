@@ -1,0 +1,79 @@
+{{- if .Values.api.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-api
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trendstorm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "trendstorm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        {{- include "trendstorm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+      annotations:
+        # Force pod restart when secrets change.
+        checksum/secret: {{ include (print $.Template.BasePath "/externalsecret.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "trendstorm.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: {{ include "trendstorm.image" (dict "registry" .Values.global.imageRegistry "name" .Values.api.image.name "tag" .Values.global.imageTag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            {{- include "trendstorm.globalEnv" . | nindent 12 }}
+            {{- include "trendstorm.mongoEnv" . | nindent 12 }}
+            {{- include "trendstorm.redisEnv" . | nindent 12 }}
+            {{- include "trendstorm.kafkaEnv" . | nindent 12 }}
+            {{- range $key, $val := .Values.api.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+            - name: AUTH__JWT_ISSUER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: trendstorm-secrets
+                  key: jwt_issuer_url
+                  optional: true
+            - name: AUTH__JWT_AUDIENCE
+              valueFrom:
+                secretKeyRef:
+                  name: trendstorm-secrets
+                  key: jwt_audience
+                  optional: true
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+      terminationGracePeriodSeconds: 30
+{{- end }}

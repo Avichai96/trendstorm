@@ -1,0 +1,135 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API (FastAPI)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "trendstorm.api.main:app",
+        "--reload",
+        "--host", "0.0.0.0",
+        "--port", "8080"
+      ],
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Worker: Orchestrator",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "trendstorm.orchestration.workers.orchestrator_worker",
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Worker: Scout",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "trendstorm.orchestration.workers.scout_worker",
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Worker: Knowledge",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "trendstorm.orchestration.workers.knowledge_worker",
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Worker: Analyst",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "trendstorm.orchestration.workers.analyst_worker",
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Worker: Publisher",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "trendstorm.orchestration.workers.publisher_worker",
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Worker: SSE Coordinator",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "trendstorm.orchestration.workers.sse_coordinator_worker",
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Worker: Production Eval",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "trendstorm.orchestration.workers.production_eval_worker",
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Worker: Outbox Relay",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "trendstorm.orchestration.workers.outbox_relay_worker",
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Smoke Test",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/smoke_test.py",
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Run Current Pytest File",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["${file}", "-v"],
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Eval: Fast",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/run_eval.py",
+      "args": ["--suite", "fast"],
+      "envFile": "${workspaceFolder}/.env.local",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ],
+  "compounds": [
+    {
+      "name": "All Workers (debug)",
+      "configurations": [
+        "Worker: Orchestrator",
+        "Worker: Scout",
+        "Worker: Knowledge",
+        "Worker: Analyst",
+        "Worker: Publisher",
+        "Worker: SSE Coordinator"
+      ],
+      "stopAll": true
+    }
+  ]
+}

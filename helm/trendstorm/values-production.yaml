@@ -1,0 +1,54 @@
+# Production value overrides.
+# Merge with: helm upgrade trendstorm ./helm/trendstorm -f helm/trendstorm/values-production.yaml
+
+global:
+  imageRegistry: "ghcr.io/trendstorm"
+  imageTag: "REPLACED_BY_CI"   # replaced by CI with the exact Git SHA tag
+  imagePullPolicy: Always
+
+api:
+  enabled: false           # disabled in favour of the Rollout below
+  rollout:
+    enabled: true
+  replicaCount: 3
+  autoscaling:
+    minReplicas: 3
+    maxReplicas: 12
+  env:
+    AUTH__MODE: key_or_oauth
+
+orchestratorWorker:
+  keda:
+    minReplicaCount: 2
+    maxReplicaCount: 10
+
+scoutWorker:
+  keda:
+    minReplicaCount: 2
+    maxReplicaCount: 20
+
+knowledgeWorker:
+  keda:
+    minReplicaCount: 2
+    maxReplicaCount: 16
+
+analystWorker:
+  keda:
+    minReplicaCount: 2
+    maxReplicaCount: 12
+
+publisherWorker:
+  keda:
+    minReplicaCount: 2
+    maxReplicaCount: 8
+
+ingress:
+  hosts:
+    - host: api.trendstorm.ai
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: trendstorm-tls
+      hosts:
+        - api.trendstorm.ai

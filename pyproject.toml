@@ -1,0 +1,255 @@
+# ==============================================================================
+# TrendStorm AI — Project Manifest
+# ==============================================================================
+# Managed with `uv` (https://docs.astral.sh/uv/).
+#
+# Quickstart:
+#   uv sync                    # install all deps from uv.lock
+#   uv sync --no-dev           # production install (no dev deps)
+#   uv add httpx               # add a runtime dep
+#   uv add --dev pytest        # add a dev dep
+#   uv run pytest              # run a command in the env
+# ==============================================================================
+
+[project]
+name = "trendstorm"
+version = "0.1.0"
+description = "Autonomous multi-agent trend intelligence and market research platform"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "TrendStorm AI" }]
+
+# ------------------------------------------------------------------------------
+# Runtime dependencies
+# Pin to major versions; let uv.lock pin exact.
+# Rationale for each group is documented in comments.
+# ------------------------------------------------------------------------------
+dependencies = [
+    # --- Web framework ---
+    "fastapi>=0.115.0,<1.0",
+    "uvicorn[standard]>=0.32.0,<1.0",       # standard = uvloop, httptools, watchfiles
+    "sse-starlette>=2.1.3,<3.0",            # SSE for streaming responses
+    # --- Configuration & validation ---
+    "pydantic>=2.9.0,<3.0",
+    "pydantic-settings>=2.6.0,<3.0",        # env/.env loading on top of Pydantic
+    # --- Logging ---
+    "structlog>=24.4.0,<25.0",              # structured logging
+    "python-json-logger>=2.0.7,<3.0",       # JSON formatter fallback
+    # --- IDs ---
+    "python-ulid>=3.0.0,<4.0",              # ULID: sortable UUID alternative
+    # --- Async data clients ---
+    "motor>=3.6.0,<4.0",                    # async MongoDB driver
+    "pymongo>=4.9.0,<5.0",                  # required by motor; we pin explicitly
+    "aiokafka>=0.12.0,<1.0",                # async Kafka client
+    "redis[hiredis]>=5.2.0,<6.0",           # async Redis client (hiredis = C parser)
+    # --- HTTP client ---
+    "httpx>=0.28.0,<1.0",                   # used by LLM providers, web fetchers
+    # --- OpenTelemetry ---
+    # We pin OTel together because their versions must align.
+    "opentelemetry-api>=1.28.0,<2.0",
+    "opentelemetry-sdk>=1.28.0,<2.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.28.0,<2.0",
+    "opentelemetry-instrumentation-fastapi>=0.49b0,<1.0",
+    "opentelemetry-instrumentation-pymongo>=0.49b0,<1.0",
+    "opentelemetry-instrumentation-redis>=0.49b0,<1.0",
+    "opentelemetry-instrumentation-httpx>=0.49b0,<1.0",
+    "opentelemetry-instrumentation-logging>=0.49b0,<1.0",
+    "lz4>=4.4.5",
+    "cramjam>=2.11.0",
+    # --- Metrics ---
+    "prometheus-client>=0.21.0,<1.0",          # Prometheus exposition format + metric types
+    "python-jose[cryptography]>=3.3.0,<4.0",
+]
+
+# ------------------------------------------------------------------------------
+# Optional groups — install with `uv sync --group <name>`
+# We split heavy deps (LLM SDKs, vector stores) into groups so the API service
+# doesn't need to ship Anthropic SDK if it never calls LLMs directly.
+# ------------------------------------------------------------------------------
+[dependency-groups]
+dev = [
+    # Testing
+    "pytest>=8.3.0,<9.0",
+    "pytest-asyncio>=0.24.0,<1.0",
+    "pytest-cov>=6.0.0,<7.0",
+    "httpx>=0.28.0,<1.0",                   # for TestClient
+    "anyio>=4.6.0,<5.0",
+    # Linting / formatting
+    "ruff>=0.8.0,<1.0",
+    "mypy>=1.13.0,<2.0",
+    # Dev utilities
+    "ipython>=8.29.0,<9.0",
+    "fakeredis>=2.26.0,<3.0",
+]
+
+# Phase 4+: agent runtime deps
+agents = [
+    "langgraph>=0.2.50,<1.0",
+    "langgraph-checkpoint-mongodb>=0.1.0,<1.0",
+    "langchain-core>=0.3.20,<1.0",
+]
+
+# Phase 4+: LLM provider SDKs
+llm = [
+    "anthropic>=0.40.0,<1.0",
+    "openai>=1.55.0,<2.0",
+    "ollama>=0.4.0,<1.0",
+    "cohere>=5.13.0,<6.0",
+    "google-genai>=1.10.0,<2.0",              # Gemini: free dev-tier embeddings + chat
+]
+
+# Phase 6+: ingestion
+ingest = [
+    "beautifulsoup4>=4.12.0,<5.0",
+    "lxml>=5.3.0,<6.0",
+    "trafilatura>=1.12.0,<2.0",             # high-quality HTML→text extraction
+    "feedparser>=6.0.0,<7.0",
+    "defusedxml>=0.7.1,<1.0",              # safe XML parsing (prevents XXE/entity bombs)
+]
+
+# Phase 7+: RAG
+rag = [
+    "chromadb>=0.5.20,<1.0",
+    "rank-bm25>=0.2.2,<1.0",
+    "tiktoken>=0.8.0,<1.0",
+    "pysbd>=0.3.4,<1.0",                      # sentence boundary detection for chunking
+    "onnxruntime>=1.14.1,<1.20",
+]
+
+# Phase 2: blob storage
+blob = [
+    "boto3>=1.35.0,<2.0",
+    "aioboto3>=13.2.0,<14.0",
+]
+
+# Phase 11: evaluation pipeline
+eval = [
+    "langsmith>=0.8.0,<1.0",   # LangSmith SDK (NOT langchain) — datasets, traces, eval UI
+]
+
+# Phase 9: report rendering
+publish = [
+    "jinja2>=3.1.0,<4.0",          # Markdown report template rendering
+    "markdown>=3.7.0,<4.0",        # Markdown → HTML for PDF conversion
+    "weasyprint>=63.0,<64.0",      # HTML → PDF rendering
+]
+
+# ------------------------------------------------------------------------------
+# Build / packaging
+# ------------------------------------------------------------------------------
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trendstorm"]
+
+# ------------------------------------------------------------------------------
+# Ruff — linter + formatter (replaces black, isort, flake8, pyupgrade)
+# ------------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",   # pycodestyle + pyflakes
+    "I",             # isort
+    "B",             # bugbear
+    "UP",            # pyupgrade
+    "ASYNC",         # async-specific lints
+    "S",             # bandit (security)
+    "SIM",           # simplification
+    # "TCH" (type-checking imports) intentionally omitted — this codebase uses
+    # Pydantic v2 which evaluates field annotations at runtime; moving imports
+    # into TYPE_CHECKING blocks breaks model construction unless every file has
+    # `from __future__ import annotations`, which itself conflicts with Pydantic.
+    "RUF",           # ruff-specific
+    "N",             # naming
+    "D",             # docstrings
+]
+ignore = [
+    "D100", "D101", "D102", "D103", "D104", "D105", "D107",  # missing docstrings — we use comments
+    "D203", "D213",   # conflicting docstring rules
+    "S101",           # asserts in tests
+    "E501",           # line length handled by formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "D"]
+"scripts/**" = ["S", "D"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ------------------------------------------------------------------------------
+# Mypy — static type checking
+# Strict mode by default; we'll relax per-module if needed.
+# ------------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["motor.*", "aiokafka.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["trafilatura.*", "feedparser.*", "bs4.*", "defusedxml.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["aioboto3.*", "botocore.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["google.genai.*", "pysbd.*", "chromadb.*", "tiktoken.*"]
+ignore_missing_imports = true
+
+# ------------------------------------------------------------------------------
+# Pytest
+# ------------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "-ra",                          # show all results except passed
+    "--strict-markers",             # error on unknown markers
+    "--strict-config",
+    "-q",
+]
+testpaths = ["tests"]
+asyncio_mode = "auto"               # pytest-asyncio: auto-detect async tests
+filterwarnings = [
+    # LangGraph 0.6.x instantiates JsonPlusSerializer without the new required
+    # `allowed_objects` arg — a bug in their own cache/base/__init__.py.
+    # Scoped to langgraph so we still see this class of warning from our own code.
+    "ignore::langchain_core._api.deprecation.LangChainPendingDeprecationWarning:langgraph",
+    # pysbd uses deprecated regex escape sequences (\s, \.) — Python 3.12 SyntaxWarning.
+    # This is a pysbd bug; suppress until they release a fix.
+    "ignore::SyntaxWarning:pysbd",
+]
+markers = [
+    "unit: unit tests (no I/O)",
+    "integration: integration tests (require docker stack)",
+    "slow: tests that take >1s",
+]
+
+[tool.coverage.run]
+source = ["src/trendstorm"]
+omit = ["*/tests/*", "*/migrations/*"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]

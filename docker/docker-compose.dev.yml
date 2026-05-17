@@ -1,0 +1,64 @@
+# ==============================================================================
+# TrendStorm AI — Dev Tools Overlay
+# ==============================================================================
+# Optional admin UIs for inspecting Kafka, MongoDB, etc.
+# Not required for the app to run — purely for developer convenience.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up -d
+# ==============================================================================
+
+name: trendstorm
+
+networks:
+  trendstorm:
+    external: false
+
+services:
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: trendstorm-kafka-ui
+    restart: unless-stopped
+    environment:
+      KAFKA_CLUSTERS_0_NAME: trendstorm-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    networks:
+      - trendstorm
+    depends_on:
+      - kafka
+
+  mongo-express:
+    image: mongo-express:1.0.2
+    container_name: trendstorm-mongo-express
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: rootpass
+      ME_CONFIG_MONGODB_URL: mongodb://root:rootpass@mongo:27017/?replicaSet=rs0&directConnection=true&authSource=admin
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
+      ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
+    ports:
+      - "8081:8081"
+    networks:
+      - trendstorm
+    depends_on:
+      - mongo
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: trendstorm-redis-commander
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: local:redis:6379
+      HTTP_USER: admin
+      HTTP_PASSWORD: admin
+    ports:
+      - "8082:8081"
+    networks:
+      - trendstorm
+    depends_on:
+      - redis

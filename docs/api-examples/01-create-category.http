@@ -1,0 +1,13 @@
+@host = http://localhost:8080
+@tenant = test-tenant-01
+
+### Create a category
+POST {{host}}/v1/categories
+Content-Type: application/json
+X-Tenant-ID: {{tenant}}
+
+{
+  "name": "AI Safety Research",
+  "description": "Latest developments in AI alignment and safety",
+  "keywords": ["alignment", "safety", "interpretability", "RLHF"]
+}

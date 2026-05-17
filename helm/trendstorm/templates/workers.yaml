@@ -1,0 +1,563 @@
+{{/*
+Worker deployments + KEDA ScaledObjects for all Kafka consumers.
+
+Each worker follows the same pattern:
+  - Deployment (controlled replica count or KEDA managed)
+  - KEDA ScaledObject (Kafka consumer lag trigger)
+
+Workers included:
+  - orchestrator-worker
+  - scout-worker
+  - knowledge-worker
+  - analyst-worker
+  - publisher-worker
+  - sse-coordinator-worker
+  - outbox-relay-worker (no KEDA — single-writer; plain HPA not needed)
+  - production-eval-worker
+*/}}
+
+{{/*
+=============================================================================
+Helper: common worker container spec (sans image / specific env)
+=============================================================================
+*/}}
+
+{{- define "trendstorm.workerEnv" -}}
+{{- include "trendstorm.globalEnv" . }}
+{{- include "trendstorm.mongoEnv" . }}
+{{- include "trendstorm.redisEnv" . }}
+{{- include "trendstorm.kafkaEnv" . }}
+- name: BLOB__ENDPOINT_URL
+  valueFrom:
+    secretKeyRef:
+      name: trendstorm-secrets
+      key: blob_endpoint_url
+      optional: true
+- name: BLOB__ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: trendstorm-secrets
+      key: blob_access_key
+      optional: true
+- name: BLOB__SECRET_KEY
+  valueFrom:
+    secretKeyRef:
+      name: trendstorm-secrets
+      key: blob_secret_key
+      optional: true
+- name: VECTOR__HOST
+  valueFrom:
+    secretKeyRef:
+      name: trendstorm-secrets
+      key: vector_host
+      optional: true
+- name: LLM__ANTHROPIC_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: trendstorm-secrets
+      key: llm_anthropic_api_key
+      optional: true
+- name: LLM__OPENAI_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: trendstorm-secrets
+      key: llm_openai_api_key
+      optional: true
+- name: LLM__GEMINI_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: trendstorm-secrets
+      key: llm_gemini_api_key
+      optional: true
+- name: LLM__COHERE_API_KEY
+  valueFrom:
+    secretKeyRef:
+      name: trendstorm-secrets
+      key: llm_cohere_api_key
+      optional: true
+{{- end }}
+
+{{/*
+=============================================================================
+Orchestrator worker
+=============================================================================
+*/}}
+{{- if .Values.orchestratorWorker.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-orchestrator-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trendstorm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: orchestrator-worker
+spec:
+  replicas: {{ .Values.orchestratorWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "trendstorm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: orchestrator-worker
+  template:
+    metadata:
+      labels:
+        {{- include "trendstorm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: orchestrator-worker
+    spec:
+      serviceAccountName: {{ include "trendstorm.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: orchestrator-worker
+          image: {{ include "trendstorm.image" (dict "registry" .Values.global.imageRegistry "name" .Values.orchestratorWorker.image.name "tag" .Values.global.imageTag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            {{- include "trendstorm.workerEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.orchestratorWorker.resources | nindent 12 }}
+      terminationGracePeriodSeconds: 60
+{{- if .Values.orchestratorWorker.keda.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-orchestrator-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    name: {{ include "trendstorm.fullname" . }}-orchestrator-worker
+  minReplicaCount: {{ .Values.orchestratorWorker.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.orchestratorWorker.keda.maxReplicaCount }}
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.keda.kafkaBroker | quote }}
+        consumerGroup: {{ .Values.orchestratorWorker.keda.consumerGroup | quote }}
+        topic: {{ .Values.orchestratorWorker.keda.topic | quote }}
+        lagThreshold: {{ .Values.orchestratorWorker.keda.lagThreshold | quote }}
+        offsetResetPolicy: latest
+{{- end }}
+{{- end }}
+
+{{/*
+=============================================================================
+Scout worker
+=============================================================================
+*/}}
+{{- if .Values.scoutWorker.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-scout-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trendstorm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: scout-worker
+spec:
+  replicas: {{ .Values.scoutWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "trendstorm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: scout-worker
+  template:
+    metadata:
+      labels:
+        {{- include "trendstorm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: scout-worker
+    spec:
+      serviceAccountName: {{ include "trendstorm.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: scout-worker
+          image: {{ include "trendstorm.image" (dict "registry" .Values.global.imageRegistry "name" .Values.scoutWorker.image.name "tag" .Values.global.imageTag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            {{- include "trendstorm.workerEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.scoutWorker.resources | nindent 12 }}
+      terminationGracePeriodSeconds: 60
+{{- if .Values.scoutWorker.keda.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-scout-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    name: {{ include "trendstorm.fullname" . }}-scout-worker
+  minReplicaCount: {{ .Values.scoutWorker.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.scoutWorker.keda.maxReplicaCount }}
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.keda.kafkaBroker | quote }}
+        consumerGroup: {{ .Values.scoutWorker.keda.consumerGroup | quote }}
+        topic: {{ .Values.scoutWorker.keda.topic | quote }}
+        lagThreshold: {{ .Values.scoutWorker.keda.lagThreshold | quote }}
+        offsetResetPolicy: latest
+{{- end }}
+{{- end }}
+
+{{/*
+=============================================================================
+Knowledge worker
+=============================================================================
+*/}}
+{{- if .Values.knowledgeWorker.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-knowledge-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trendstorm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: knowledge-worker
+spec:
+  replicas: {{ .Values.knowledgeWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "trendstorm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: knowledge-worker
+  template:
+    metadata:
+      labels:
+        {{- include "trendstorm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: knowledge-worker
+    spec:
+      serviceAccountName: {{ include "trendstorm.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: knowledge-worker
+          image: {{ include "trendstorm.image" (dict "registry" .Values.global.imageRegistry "name" .Values.knowledgeWorker.image.name "tag" .Values.global.imageTag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            {{- include "trendstorm.workerEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.knowledgeWorker.resources | nindent 12 }}
+      terminationGracePeriodSeconds: 60
+{{- if .Values.knowledgeWorker.keda.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-knowledge-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    name: {{ include "trendstorm.fullname" . }}-knowledge-worker
+  minReplicaCount: {{ .Values.knowledgeWorker.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.knowledgeWorker.keda.maxReplicaCount }}
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.keda.kafkaBroker | quote }}
+        consumerGroup: {{ .Values.knowledgeWorker.keda.consumerGroup | quote }}
+        topic: {{ .Values.knowledgeWorker.keda.topic | quote }}
+        lagThreshold: {{ .Values.knowledgeWorker.keda.lagThreshold | quote }}
+        offsetResetPolicy: latest
+{{- end }}
+{{- end }}
+
+{{/*
+=============================================================================
+Analyst worker
+=============================================================================
+*/}}
+{{- if .Values.analystWorker.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-analyst-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trendstorm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: analyst-worker
+spec:
+  replicas: {{ .Values.analystWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "trendstorm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: analyst-worker
+  template:
+    metadata:
+      labels:
+        {{- include "trendstorm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: analyst-worker
+    spec:
+      serviceAccountName: {{ include "trendstorm.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: analyst-worker
+          image: {{ include "trendstorm.image" (dict "registry" .Values.global.imageRegistry "name" .Values.analystWorker.image.name "tag" .Values.global.imageTag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            {{- include "trendstorm.workerEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.analystWorker.resources | nindent 12 }}
+      terminationGracePeriodSeconds: 120
+{{- if .Values.analystWorker.keda.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-analyst-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    name: {{ include "trendstorm.fullname" . }}-analyst-worker
+  minReplicaCount: {{ .Values.analystWorker.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.analystWorker.keda.maxReplicaCount }}
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.keda.kafkaBroker | quote }}
+        consumerGroup: {{ .Values.analystWorker.keda.consumerGroup | quote }}
+        topic: {{ .Values.analystWorker.keda.topic | quote }}
+        lagThreshold: {{ .Values.analystWorker.keda.lagThreshold | quote }}
+        offsetResetPolicy: latest
+{{- end }}
+{{- end }}
+
+{{/*
+=============================================================================
+Publisher worker
+=============================================================================
+*/}}
+{{- if .Values.publisherWorker.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-publisher-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trendstorm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: publisher-worker
+spec:
+  replicas: {{ .Values.publisherWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "trendstorm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: publisher-worker
+  template:
+    metadata:
+      labels:
+        {{- include "trendstorm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: publisher-worker
+    spec:
+      serviceAccountName: {{ include "trendstorm.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: publisher-worker
+          image: {{ include "trendstorm.image" (dict "registry" .Values.global.imageRegistry "name" .Values.publisherWorker.image.name "tag" .Values.global.imageTag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            {{- include "trendstorm.workerEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.publisherWorker.resources | nindent 12 }}
+      terminationGracePeriodSeconds: 60
+{{- if .Values.publisherWorker.keda.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-publisher-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    name: {{ include "trendstorm.fullname" . }}-publisher-worker
+  minReplicaCount: {{ .Values.publisherWorker.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.publisherWorker.keda.maxReplicaCount }}
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.keda.kafkaBroker | quote }}
+        consumerGroup: {{ .Values.publisherWorker.keda.consumerGroup | quote }}
+        topic: {{ .Values.publisherWorker.keda.topic | quote }}
+        lagThreshold: {{ .Values.publisherWorker.keda.lagThreshold | quote }}
+        offsetResetPolicy: latest
+{{- end }}
+{{- end }}
+
+{{/*
+=============================================================================
+SSE coordinator worker
+=============================================================================
+*/}}
+{{- if .Values.sseCoordinatorWorker.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-sse-coordinator-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trendstorm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: sse-coordinator-worker
+spec:
+  replicas: {{ .Values.sseCoordinatorWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "trendstorm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: sse-coordinator-worker
+  template:
+    metadata:
+      labels:
+        {{- include "trendstorm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: sse-coordinator-worker
+    spec:
+      serviceAccountName: {{ include "trendstorm.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: sse-coordinator-worker
+          image: {{ include "trendstorm.image" (dict "registry" .Values.global.imageRegistry "name" .Values.sseCoordinatorWorker.image.name "tag" .Values.global.imageTag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            {{- include "trendstorm.workerEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.sseCoordinatorWorker.resources | nindent 12 }}
+      terminationGracePeriodSeconds: 30
+{{- if .Values.sseCoordinatorWorker.keda.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-sse-coordinator-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    name: {{ include "trendstorm.fullname" . }}-sse-coordinator-worker
+  minReplicaCount: {{ .Values.sseCoordinatorWorker.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.sseCoordinatorWorker.keda.maxReplicaCount }}
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.keda.kafkaBroker | quote }}
+        consumerGroup: {{ .Values.sseCoordinatorWorker.keda.consumerGroup | quote }}
+        topic: {{ .Values.sseCoordinatorWorker.keda.topic | quote }}
+        lagThreshold: {{ .Values.sseCoordinatorWorker.keda.lagThreshold | quote }}
+        offsetResetPolicy: latest
+{{- end }}
+{{- end }}
+
+{{/*
+=============================================================================
+Outbox relay worker (no KEDA — single-writer pattern)
+=============================================================================
+*/}}
+{{- if .Values.outboxRelayWorker.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-outbox-relay-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trendstorm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: outbox-relay-worker
+spec:
+  replicas: {{ .Values.outboxRelayWorker.replicaCount }}
+  strategy:
+    type: Recreate   # Single-writer: no two pods should poll simultaneously.
+  selector:
+    matchLabels:
+      {{- include "trendstorm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: outbox-relay-worker
+  template:
+    metadata:
+      labels:
+        {{- include "trendstorm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: outbox-relay-worker
+    spec:
+      serviceAccountName: {{ include "trendstorm.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: outbox-relay-worker
+          image: {{ include "trendstorm.image" (dict "registry" .Values.global.imageRegistry "name" .Values.outboxRelayWorker.image.name "tag" .Values.global.imageTag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            {{- include "trendstorm.workerEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.outboxRelayWorker.resources | nindent 12 }}
+      terminationGracePeriodSeconds: 30
+{{- end }}
+
+{{/*
+=============================================================================
+Production eval worker
+=============================================================================
+*/}}
+{{- if .Values.productionEvalWorker.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-production-eval-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "trendstorm.labels" . | nindent 4 }}
+    app.kubernetes.io/component: production-eval-worker
+spec:
+  replicas: {{ .Values.productionEvalWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "trendstorm.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: production-eval-worker
+  template:
+    metadata:
+      labels:
+        {{- include "trendstorm.labels" . | nindent 8 }}
+        app.kubernetes.io/component: production-eval-worker
+    spec:
+      serviceAccountName: {{ include "trendstorm.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: production-eval-worker
+          image: {{ include "trendstorm.image" (dict "registry" .Values.global.imageRegistry "name" .Values.productionEvalWorker.image.name "tag" .Values.global.imageTag) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            {{- include "trendstorm.workerEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.productionEvalWorker.resources | nindent 12 }}
+      terminationGracePeriodSeconds: 60
+{{- if .Values.productionEvalWorker.keda.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "trendstorm.fullname" . }}-production-eval-worker
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    name: {{ include "trendstorm.fullname" . }}-production-eval-worker
+  minReplicaCount: {{ .Values.productionEvalWorker.keda.minReplicaCount }}
+  maxReplicaCount: {{ .Values.productionEvalWorker.keda.maxReplicaCount }}
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.keda.kafkaBroker | quote }}
+        consumerGroup: {{ .Values.productionEvalWorker.keda.consumerGroup | quote }}
+        topic: {{ .Values.productionEvalWorker.keda.topic | quote }}
+        lagThreshold: {{ .Values.productionEvalWorker.keda.lagThreshold | quote }}
+        offsetResetPolicy: latest
+{{- end }}
+{{- end }}

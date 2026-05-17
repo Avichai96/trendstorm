@@ -1,0 +1,140 @@
+# ==============================================================================
+# OpenTelemetry Collector Configuration
+# ------------------------------------------------------------------------------
+# Pipeline anatomy:
+#   receivers → processors → exporters
+#
+# We expose OTLP (gRPC + HTTP) for apps to send to, then fan out to
+# specialized backends per signal type (traces/metrics/logs).
+# ==============================================================================
+
+receivers:
+  # OTLP — what our Python apps send
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          allowed_origins: ["*"]   # local dev only
+
+  # Self-monitor: collector exposes its own metrics on :8888
+  prometheus/internal:
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['0.0.0.0:8888']
+
+processors:
+  # Batching reduces export overhead.
+  # In prod, tune timeout/send_batch_size based on traffic.
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+  # Memory limiter prevents collector OOM under burst load.
+  # check_interval frequent for fast reaction; limit % of container memory.
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+
+  # Resource processor enriches every signal with deployment metadata.
+  # `insert` only adds if absent — apps can override.
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: local
+        action: insert
+
+  # Scrub potentially sensitive attributes before export.
+  # In real prod, add tenant_id hashing, PII redaction, etc.
+  attributes/scrub:
+    actions:
+      - key: http.request.header.authorization
+        action: delete
+      - key: http.request.header.cookie
+        action: delete
+
+  # Tail-based sampling — decision made after all spans for a trace arrive.
+  # Policies are evaluated in order; first match wins.
+  # decision_wait: hold spans this long before deciding (covers slow workers).
+  tail_sampling:
+    decision_wait: 30s
+    num_traces: 50000        # max in-flight traces buffered in memory
+    expected_new_traces_per_sec: 20
+    policies:
+      # 1. Always keep error traces — every failure must be inspectable.
+      - name: errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      # 2. Keep slow traces — analyst SLO is 300s p99; capture anything > 120s.
+      - name: slow-traces
+        type: latency
+        latency:
+          threshold_ms: 120000
+      # 3. Random 5% of everything else (healthy, fast paths).
+      - name: random-5pct
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 5
+
+exporters:
+  # ----- TRACES -----
+  # OTLP exporter to Jaeger (Jaeger accepts OTLP natively since 1.35+)
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # ----- METRICS -----
+  # Prometheus pull endpoint — Prometheus scrapes this on :8889
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    send_timestamps: true
+    metric_expiration: 180m
+    resource_to_telemetry_conversion:
+      enabled: true   # promote resource attrs (e.g. service.name) to labels
+
+  # ----- LOGS -----
+  # Loki via OTLP HTTP. Loki 3.x supports OTLP ingest natively.
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
+  # Debug exporter — verbose stdout, useful when developing instrumentation.
+  # Disabled by default; enable by adding to a pipeline below.
+  debug:
+    verbosity: detailed
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+service:
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: 0.0.0.0:8888
+
+  pipelines:
+    traces:
+      receivers: [otlp]
+      # tail_sampling buffers spans per-trace, then decides; batch flushes after.
+      processors: [memory_limiter, resource, attributes/scrub, tail_sampling, batch]
+      exporters: [otlp/jaeger]
+
+    metrics:
+      receivers: [otlp, prometheus/internal]
+      processors: [memory_limiter, resource, batch]
+      exporters: [prometheus]
+
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, attributes/scrub, batch]
+      exporters: [otlphttp/loki]

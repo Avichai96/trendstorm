@@ -1,0 +1,258 @@
+# =============================================================================
+# TrendStorm AI — Service Level Objectives
+# =============================================================================
+#
+# This file is the SINGLE SOURCE OF TRUTH for SLO thresholds.
+# Alert rules in docker/config/grafana/alerts/rules.yml MUST derive
+# their thresholds from the values here.
+#
+# Schema per entry:
+#   id:          kebab-case identifier, must be unique, used in runbook filenames
+#   description: one sentence, user-facing impact
+#   metric:      the PromQL metric family this SLO is measured on
+#   signal:      latency | availability | throughput | saturation
+#   objective:   numeric target (fraction for availability/error_rate, seconds
+#                for latency, count for saturation)
+#   percentile:  p50/p95/p99 for latency SLOs; null for availability/rate SLOs
+#   window:      Prometheus range vector for the evaluation window
+#   severity:    page (user-facing damage) | warn (precursor signal)
+#   runbook:     path relative to repo root
+#
+# Cardinality discipline:
+#   Alert expressions aggregate by {tenant_id, service} only.
+#   job_id, document_id, chunk_id are NEVER in metric labels.
+# =============================================================================
+
+version: "1"
+
+slos:
+
+  # ---------------------------------------------------------------------------
+  # API availability
+  # ---------------------------------------------------------------------------
+  - id: api-availability
+    description: >
+      The TrendStorm API returns 5xx errors for less than 0.1% of requests.
+      Exceeding this means tenants cannot create jobs or query results.
+    metric: trendstorm_api_requests_total
+    signal: availability
+    objective: 0.999          # 99.9% success rate
+    percentile: null
+    window: 5m
+    page_threshold: 0.990     # immediate page: more than 1% errors over 5m
+    warn_threshold: 0.999     # warn: approaching SLO boundary
+    severity: page
+    runbook: ops/runbooks/api-availability.md
+
+  # ---------------------------------------------------------------------------
+  # API request latency (non-streaming endpoints)
+  # ---------------------------------------------------------------------------
+  - id: api-latency
+    description: >
+      95% of non-streaming API requests complete in under 500 ms.
+      Impacts job creation, status polling, and category/source management.
+    metric: trendstorm_api_request_duration_seconds
+    signal: latency
+    objective: 0.500          # 500 ms
+    percentile: p95
+    window: 5m
+    page_threshold: 2.000     # page if p95 exceeds 2s
+    warn_threshold: 0.500     # warn at SLO boundary
+    severity: page
+    runbook: ops/runbooks/api-latency.md
+
+  # ---------------------------------------------------------------------------
+  # End-to-end job latency (job requested → COMPLETED)
+  # ---------------------------------------------------------------------------
+  - id: job-latency
+    description: >
+      95% of TrendStorm jobs complete within 10 minutes end-to-end.
+      Includes all pipeline stages: scout → knowledge → analyst → publisher.
+    metric: trendstorm_job_duration_seconds
+    signal: latency
+    objective: 600            # 10 minutes
+    percentile: p95
+    window: 1h
+    page_threshold: 900       # page if p95 exceeds 15 minutes
+    warn_threshold: 600       # warn at SLO boundary
+    severity: page
+    runbook: ops/runbooks/job-latency.md
+
+  # ---------------------------------------------------------------------------
+  # Scout stage latency (per source: fetch + parse + upload)
+  # ---------------------------------------------------------------------------
+  - id: scout-fetch-latency
+    description: >
+      95% of individual source fetch-parse-upload cycles complete under 30 s.
+      Slow fetches back-pressure the ingestion queue and delay downstream stages.
+    metric: trendstorm_scout_source_duration_seconds
+    signal: latency
+    objective: 30.0
+    percentile: p95
+    window: 15m
+    page_threshold: 120.0     # page if p95 exceeds 2 minutes
+    warn_threshold: 30.0
+    severity: warn
+    runbook: ops/runbooks/scout-fetch-latency.md
+
+  # ---------------------------------------------------------------------------
+  # Knowledge stage latency (per document: chunk + embed + upsert)
+  # ---------------------------------------------------------------------------
+  - id: knowledge-embed-latency
+    description: >
+      95% of document embedding pipelines (chunk + embed + vector upsert)
+      complete under 60 s. Delays here stall analysis for all jobs in the queue.
+    metric: trendstorm_knowledge_document_duration_seconds
+    signal: latency
+    objective: 60.0
+    percentile: p95
+    window: 15m
+    page_threshold: 300.0     # page if p95 exceeds 5 minutes
+    warn_threshold: 60.0
+    severity: warn
+    runbook: ops/runbooks/knowledge-embed-latency.md
+
+  # ---------------------------------------------------------------------------
+  # Analyst stage latency (full analyst pass: retrieval + LLM + validation)
+  # ---------------------------------------------------------------------------
+  - id: analyst-pass-latency
+    description: >
+      95% of analyst passes (retrieve + LLM call + validator pass) complete
+      under 120 s. LLM API latency is the dominant factor; this SLO gives
+      budget for one retry before routing to refinement.
+    metric: trendstorm_analyst_pass_duration_seconds
+    signal: latency
+    objective: 120.0
+    percentile: p95
+    window: 30m
+    page_threshold: 300.0     # page if p95 exceeds 5 minutes
+    warn_threshold: 120.0
+    severity: warn
+    runbook: ops/runbooks/analyst-pass-latency.md
+
+  # ---------------------------------------------------------------------------
+  # Publish stage latency (render + MinIO upload per job)
+  # ---------------------------------------------------------------------------
+  - id: publisher-render-latency
+    description: >
+      95% of publish pipeline runs (render MD+JSON+PDF, upload to MinIO)
+      complete under 30 s. PDF render is best-effort and excluded from timing.
+    metric: trendstorm_publisher_render_duration_seconds
+    signal: latency
+    objective: 30.0
+    percentile: p95
+    window: 15m
+    page_threshold: 120.0
+    warn_threshold: 30.0
+    severity: warn
+    runbook: ops/runbooks/publisher-render-latency.md
+
+  # ---------------------------------------------------------------------------
+  # SSE event delivery latency (stream.partial.v1 → Redis Streams write)
+  # ---------------------------------------------------------------------------
+  - id: sse-delivery-latency
+    description: >
+      95% of SSE events are written to Redis Streams within 1 s of the
+      Kafka message being consumed by the SSE coordinator. Exceeding this
+      makes the live job stream feel unresponsive to the end user.
+    metric: trendstorm_sse_event_duration_seconds
+    signal: latency
+    objective: 1.0
+    percentile: p95
+    window: 5m
+    page_threshold: 5.0       # page if p95 exceeds 5s
+    warn_threshold: 1.0
+    severity: page
+    runbook: ops/runbooks/sse-delivery-latency.md
+
+  # ---------------------------------------------------------------------------
+  # Kafka consumer lag (per consumer group)
+  # ---------------------------------------------------------------------------
+  - id: kafka-consumer-lag
+    description: >
+      No Kafka consumer group falls more than 500 messages behind the
+      partition head. Sustained lag indicates a worker is overloaded or
+      has crashed; new jobs will queue indefinitely.
+    metric: trendstorm_kafka_consumer_lag_messages
+    signal: saturation
+    objective: 500            # max lag in messages
+    percentile: null
+    window: 5m
+    page_threshold: 2000      # page if any group hits 2000 lag
+    warn_threshold: 500
+    severity: page
+    runbook: ops/runbooks/kafka-consumer-lag.md
+
+  # ---------------------------------------------------------------------------
+  # LLM permanent error rate (analyst passes)
+  # ---------------------------------------------------------------------------
+  - id: llm-error-rate
+    description: >
+      Fewer than 1% of analyst LLM calls result in permanent errors
+      (auth failures, schema errors, provider outages). Exceeding this
+      causes jobs to fail at the analysis stage with no retry path.
+    metric: trendstorm_llm_calls_total
+    signal: availability
+    objective: 0.990          # 99% success (≤1% permanent errors)
+    percentile: null
+    window: 15m
+    page_threshold: 0.950     # page if more than 5% calls fail permanently
+    warn_threshold: 0.990
+    severity: page
+    runbook: ops/runbooks/llm-error-rate.md
+
+  # ---------------------------------------------------------------------------
+  # LLM cost spike (per tenant, rolling 1 hour)
+  # ---------------------------------------------------------------------------
+  - id: llm-cost-spike
+    description: >
+      No single tenant spends more than $10 USD equivalent on LLM tokens
+      in any rolling 60-minute window. A spike indicates a runaway job
+      loop, misconfigured refinement budget, or tenant abuse.
+    metric: trendstorm_llm_input_tokens_total
+    signal: saturation
+    # Token thresholds use GPT-4o pricing as reference (~$2.50/1M input tokens).
+    # $10 / $2.50 per 1M = 4 million tokens per hour per tenant.
+    objective: 4000000        # tokens per hour per tenant
+    percentile: null
+    window: 1h
+    page_threshold: 10000000  # page at 10M tokens/hour/tenant (≈$25)
+    warn_threshold: 4000000
+    severity: warn
+    runbook: ops/runbooks/llm-cost-spike.md
+
+  # ---------------------------------------------------------------------------
+  # MongoDB connection pool saturation
+  # ---------------------------------------------------------------------------
+  - id: mongo-connections
+    description: >
+      MongoDB connection pool utilization stays below 80% on any node.
+      Near-full pools cause request queuing and latency spikes across
+      all services that share the Mongo cluster.
+    metric: trendstorm_mongo_pool_utilization_ratio
+    signal: saturation
+    objective: 0.80           # 80% utilization ceiling
+    percentile: null
+    window: 5m
+    page_threshold: 0.95      # page above 95% — nearly full
+    warn_threshold: 0.80
+    severity: page
+    runbook: ops/runbooks/mongo-connections.md
+
+  # ---------------------------------------------------------------------------
+  # Vector store (ChromaDB) availability
+  # ---------------------------------------------------------------------------
+  - id: vector-store-availability
+    description: >
+      ChromaDB health check succeeds on every ready probe. A failing
+      vector store silently returns empty results from the hybrid
+      retriever, degrading analysis quality without a visible error.
+    metric: trendstorm_vector_store_health
+    signal: availability
+    objective: 1.0            # binary: 1 = healthy, 0 = down
+    percentile: null
+    window: 2m
+    page_threshold: 0.0       # page immediately when unhealthy
+    warn_threshold: 1.0
+    severity: page
+    runbook: ops/runbooks/vector-store-availability.md

@@ -1,0 +1,69 @@
+# Prometheus scrape config for TrendStorm dev stack
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'trendstorm-local'
+    env: 'local'
+
+rule_files:
+  - /etc/prometheus/alerts/*.yml
+
+scrape_configs:
+  # OTel collector exposes app metrics here (forwarded from OTLP)
+  - job_name: 'otel-collector-app-metrics'
+    static_configs:
+      - targets: ['otel-collector:8889']
+
+  # OTel collector's own self-metrics
+  - job_name: 'otel-collector-internal'
+    static_configs:
+      - targets: ['otel-collector:8888']
+
+  # Prometheus monitoring itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # TrendStorm worker /metrics endpoints (port 9090 per container)
+  - job_name: 'trendstorm-api'
+    static_configs:
+      - targets: ['api:9090']
+        labels:
+          service: 'api'
+
+  - job_name: 'trendstorm-orchestrator-worker'
+    static_configs:
+      - targets: ['orchestrator-worker:9090']
+        labels:
+          service: 'orchestrator-worker'
+
+  - job_name: 'trendstorm-scout-worker'
+    static_configs:
+      - targets: ['scout-worker:9090']
+        labels:
+          service: 'scout-worker'
+
+  - job_name: 'trendstorm-knowledge-worker'
+    static_configs:
+      - targets: ['knowledge-worker:9090']
+        labels:
+          service: 'knowledge-worker'
+
+  - job_name: 'trendstorm-analyst-worker'
+    static_configs:
+      - targets: ['analyst-worker:9090']
+        labels:
+          service: 'analyst-worker'
+
+  - job_name: 'trendstorm-publisher-worker'
+    static_configs:
+      - targets: ['publisher-worker:9090']
+        labels:
+          service: 'publisher-worker'
+
+  - job_name: 'trendstorm-sse-coordinator-worker'
+    static_configs:
+      - targets: ['sse-coordinator-worker:9090']
+        labels:
+          service: 'sse-coordinator-worker'

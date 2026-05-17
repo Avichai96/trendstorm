@@ -1,0 +1,454 @@
+{
+  "__inputs": [],
+  "__requires": [
+    {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "10.0.0"},
+    {"type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0"}
+  ],
+  "annotations": {"list": []},
+  "description": "TrendStorm AI — Four Golden Signals across all pipeline stages.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "title": "Jobs",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "palette-classic"}, "unit": "ops"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 1},
+      "id": 2,
+      "options": {"legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom"}},
+      "targets": [
+        {
+          "expr": "sum(rate(trendstorm_jobs_total[5m])) by (status)",
+          "legendFormat": "{{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Job Completion Rate (5m)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "palette-classic"}, "unit": "s"},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 1},
+      "id": 3,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(trendstorm_job_duration_seconds_bucket[5m])) by (le, status))",
+          "legendFormat": "p50 {{status}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(trendstorm_job_duration_seconds_bucket[5m])) by (le, status))",
+          "legendFormat": "p99 {{status}}",
+          "refId": "B"
+        }
+      ],
+      "title": "End-to-End Job Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"color": {"mode": "thresholds"}, "unit": "percentunit",
+          "thresholds": {"steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 0.01},
+            {"color": "red", "value": 0.05}
+          ]}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 1},
+      "id": 4,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto", "textMode": "auto", "colorMode": "background"},
+      "targets": [
+        {
+          "expr": "sum(rate(trendstorm_jobs_total{status=~\"error|permanent_error\"}[5m])) / sum(rate(trendstorm_jobs_total[5m]))",
+          "legendFormat": "Job error rate",
+          "refId": "A"
+        }
+      ],
+      "title": "Job Error Rate",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
+      "id": 10,
+      "title": "Scout Worker",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 10},
+      "id": 11,
+      "targets": [
+        {
+          "expr": "sum(rate(trendstorm_scout_sources_total[5m])) by (content_type, status)",
+          "legendFormat": "{{content_type}} / {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Scout: Sources/s by Type",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 10},
+      "id": 12,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(trendstorm_scout_source_duration_seconds_bucket[5m])) by (le, status))",
+          "legendFormat": "p99 {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Scout: Source Fetch Duration p99",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 10},
+      "id": 13,
+      "targets": [
+        {
+          "expr": "sum(rate(trendstorm_scout_bytes_fetched_total[5m])) by ()",
+          "legendFormat": "Bytes fetched/s",
+          "refId": "A"
+        }
+      ],
+      "title": "Scout: Bytes Fetched/s",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17},
+      "id": 20,
+      "title": "Knowledge Worker",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 18},
+      "id": 21,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(trendstorm_knowledge_document_duration_seconds_bucket[5m])) by (le, status))",
+          "legendFormat": "p99 {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Knowledge: Document Embed Duration p99",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 18},
+      "id": 22,
+      "targets": [
+        {
+          "expr": "sum(rate(trendstorm_knowledge_chunks_created_total[5m]))",
+          "legendFormat": "Chunks/s",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(trendstorm_knowledge_vectors_upserted_total[5m])) by (model_id)",
+          "legendFormat": "Vectors/s {{model_id}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Knowledge: Chunks & Vectors/s",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 18},
+      "id": 23,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(trendstorm_knowledge_embed_batch_duration_seconds_bucket[5m])) by (le, model_id))",
+          "legendFormat": "p99 {{model_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Knowledge: Embed Batch Duration p99",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 25},
+      "id": 30,
+      "title": "Analyst Worker",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 26},
+      "id": 31,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(trendstorm_analyst_pass_duration_seconds_bucket[5m])) by (le, status))",
+          "legendFormat": "p50 {{status}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(trendstorm_analyst_pass_duration_seconds_bucket[5m])) by (le, status))",
+          "legendFormat": "p99 {{status}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Analyst: Pass Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 26},
+      "id": 32,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(trendstorm_analyst_retrieval_hits_bucket[5m])) by (le, backend))",
+          "legendFormat": "p50 {{backend}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Analyst: Retrieval Hits per Backend",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 26},
+      "id": 33,
+      "targets": [
+        {
+          "expr": "sum(rate(trendstorm_analyst_refinement_loops_total[5m]))",
+          "legendFormat": "Refinement loops/s",
+          "refId": "A"
+        }
+      ],
+      "title": "Analyst: Refinement Loops/s",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 33},
+      "id": 40,
+      "title": "LLM Cost",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 34},
+      "id": 41,
+      "targets": [
+        {
+          "expr": "sum(rate(trendstorm_llm_input_tokens_total[5m])) by (provider, model_id)",
+          "legendFormat": "in {{provider}}/{{model_id}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(trendstorm_llm_output_tokens_total[5m])) by (provider, model_id)",
+          "legendFormat": "out {{provider}}/{{model_id}}",
+          "refId": "B"
+        }
+      ],
+      "title": "LLM: Tokens/s by Provider",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 34},
+      "id": 42,
+      "targets": [
+        {
+          "expr": "sum(rate(trendstorm_llm_cached_tokens_total[5m])) by (provider)",
+          "legendFormat": "cached {{provider}}",
+          "refId": "A"
+        }
+      ],
+      "title": "LLM: Cached Tokens/s (Anthropic prompt cache)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 34},
+      "id": 43,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(trendstorm_llm_call_duration_seconds_bucket[5m])) by (le, provider, operation))",
+          "legendFormat": "p99 {{provider}}/{{operation}}",
+          "refId": "A"
+        }
+      ],
+      "title": "LLM: Call Duration p99",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 41},
+      "id": 50,
+      "title": "SSE & Publisher",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 42},
+      "id": 51,
+      "targets": [
+        {
+          "expr": "sum(rate(trendstorm_sse_events_total[5m])) by (event_type, status)",
+          "legendFormat": "{{event_type}} / {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "SSE: Events/s by Type",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 42},
+      "id": 52,
+      "targets": [
+        {
+          "expr": "sum(trendstorm_sse_active_connections) by (service)",
+          "legendFormat": "Active SSE connections",
+          "refId": "A"
+        }
+      ],
+      "title": "SSE: Active Connections",
+      "type": "stat"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 42},
+      "id": 53,
+      "targets": [
+        {
+          "expr": "sum(rate(trendstorm_publisher_renders_total[5m])) by (format, status)",
+          "legendFormat": "{{format}} / {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Publisher: Renders/s by Format",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 49},
+      "id": 60,
+      "title": "Infrastructure",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "short",
+          "thresholds": {"steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 100},
+            {"color": "red", "value": 500}
+          ]}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 50},
+      "id": 61,
+      "targets": [
+        {
+          "expr": "sum(trendstorm_kafka_consumer_lag_messages) by (service, topic)",
+          "legendFormat": "{{service}} / {{topic}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Consumer Lag (messages)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "percentunit",
+          "thresholds": {"steps": [
+            {"color": "green", "value": null},
+            {"color": "yellow", "value": 0.7},
+            {"color": "red", "value": 0.9}
+          ]}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 7, "w": 6, "x": 12, "y": 50},
+      "id": 62,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto"},
+      "targets": [
+        {
+          "expr": "trendstorm_mongo_pool_utilization_ratio",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Mongo Pool Utilization",
+      "type": "gauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {"unit": "bool",
+          "thresholds": {"steps": [
+            {"color": "red", "value": null},
+            {"color": "green", "value": 1}
+          ]}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 7, "w": 6, "x": 18, "y": 50},
+      "id": 63,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "auto"},
+      "targets": [
+        {
+          "expr": "trendstorm_vector_store_health",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ],
+      "title": "ChromaDB Health",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["trendstorm", "overview"],
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "TrendStorm — Overview",
+  "uid": "trendstorm-overview",
+  "version": 1
+}

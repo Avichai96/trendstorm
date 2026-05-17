@@ -1,0 +1,51 @@
+# Build context exclusions.
+# Anything matched here is NOT sent to the Docker daemon during build,
+# which makes builds faster and prevents leaking dev artifacts into images.
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Test & lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git / OS noise
+.git/
+.gitignore
+.DS_Store
+Thumbs.db
+
+# Local dev stuff
+.env
+.env.local
+.env.*.local
+docker/config/mongo/keyfile
+
+# Docs that don't belong in runtime images
+docs/
+*.md
+!README.md
+
+# Tests are not shipped in production images
+tests/
+
+# Compose files (we use them from outside the container)
+docker-compose*.yml

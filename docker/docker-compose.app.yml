@@ -1,0 +1,367 @@
+# =============================================================================
+# TrendStorm AI — Application services (API + workers)
+# =============================================================================
+# Compose this WITH docker-compose.yml (base infrastructure):
+#     docker compose -f docker/docker-compose.yml \
+#                    -f docker/docker-compose.app.yml up -d
+# Or use the Makefile: `make up-app`.
+#
+# Why split from the base compose?
+#   - Local dev usually runs the app from your IDE/uv for hot-reload speed.
+#   - This file is for integration tests and full-stack demos.
+#   - CI uses it to run the orchestrator worker for e2e tests.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # API service
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+    image: trendstorm-api:local
+    container_name: trendstorm-api
+    restart: unless-stopped
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      # The .env file values are overridden by anything set here.
+      # Inside the docker network, services reach each other by service name.
+      APP__ENV: dev
+      APP__LOG_FORMAT: json
+      APP__LOG_LEVEL: INFO
+      MONGO__URI: "mongodb://root:rootpass@mongo:27017/?replicaSet=rs0&directConnection=true&authSource=admin"
+      KAFKA__BOOTSTRAP_SERVERS: "kafka:9092"
+      REDIS__URL: "redis://redis:6379/0"
+      OTEL__EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL__SERVICE_NAME: "trendstorm-api"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    networks:
+      - trendstorm
+
+  # ---------------------------------------------------------------------------
+  # Orchestrator worker
+  # ---------------------------------------------------------------------------
+  # Stateless: scale freely with `docker compose up --scale orchestrator-worker=N`
+  # Each replica joins the same Kafka consumer group and gets its own slice
+  # of partitions.
+  # ---------------------------------------------------------------------------
+  orchestrator-worker:
+    build:
+      context: ..
+      dockerfile: docker/worker.Dockerfile
+    image: trendstorm-worker:local
+    # No container_name — allows scale > 1 (compose appends -2, -3, etc.)
+    restart: unless-stopped
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      APP__ENV: dev
+      APP__LOG_FORMAT: json
+      APP__LOG_LEVEL: INFO
+      MONGO__URI: "mongodb://root:rootpass@mongo:27017/?replicaSet=rs0&directConnection=true&authSource=admin"
+      KAFKA__BOOTSTRAP_SERVERS: "kafka:9092"
+      REDIS__URL: "redis://redis:6379/0"
+      OTEL__EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL__SERVICE_NAME: "trendstorm-orchestrator"
+    networks:
+      - trendstorm
+    # Workers are CPU-bound during graph execution (LLM calls are async I/O).
+    # In production you'd set proper resource limits; for local dev we let
+    # Docker manage.
+
+  # ---------------------------------------------------------------------------
+  # Scout worker — ingestion pipeline
+  # ---------------------------------------------------------------------------
+  # Consumes ingest.pending.v1, fans out N=16 concurrent fetches, writes
+  # RawDocuments to Mongo + MinIO, publishes ingest.completed.v1.
+  # ---------------------------------------------------------------------------
+  scout-worker:
+    build:
+      context: ..
+      dockerfile: docker/scout.Dockerfile
+    image: trendstorm-scout:local
+    restart: unless-stopped
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      APP__ENV: dev
+      APP__LOG_FORMAT: json
+      APP__LOG_LEVEL: INFO
+      MONGO__URI: "mongodb://root:rootpass@mongo:27017/?replicaSet=rs0&directConnection=true&authSource=admin"
+      KAFKA__BOOTSTRAP_SERVERS: "kafka:9092"
+      REDIS__URL: "redis://redis:6379/0"
+      BLOB__ENDPOINT: "http://minio:9000"
+      BLOB__ACCESS_KEY: "minioadmin"
+      BLOB__SECRET_KEY: "minioadmin"
+      OTEL__EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL__SERVICE_NAME: "trendstorm-scout"
+    networks:
+      - trendstorm
+
+
+  # ---------------------------------------------------------------------------
+  # Knowledge worker — chunking + embedding pipeline
+  # ---------------------------------------------------------------------------
+  # Consumes knowledge.pending.v1: downloads text blobs from MinIO, chunks via
+  # pysbd sentence segmentation, embeds via the configured LLM provider, writes
+  # Chunk documents to Mongo, upserts vectors to ChromaDB, publishes
+  # knowledge.completed.v1 so the orchestrator can resume the graph.
+  # ---------------------------------------------------------------------------
+  knowledge-worker:
+    build:
+      context: ..
+      dockerfile: docker/knowledge.Dockerfile
+    image: trendstorm-knowledge:local
+    restart: unless-stopped
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      APP__ENV: dev
+      APP__LOG_FORMAT: json
+      APP__LOG_LEVEL: INFO
+      MONGO__URI: "mongodb://root:rootpass@mongo:27017/?replicaSet=rs0&directConnection=true&authSource=admin"
+      KAFKA__BOOTSTRAP_SERVERS: "kafka:9092"
+      REDIS__URL: "redis://redis:6379/0"
+      BLOB__ENDPOINT: "http://minio:9000"
+      BLOB__ACCESS_KEY: "minioadmin"
+      BLOB__SECRET_KEY: "minioadmin"
+      VECTOR__CHROMA_HOST: "chroma"
+      VECTOR__CHROMA_PORT: "8000"
+      LLM__DEFAULT_EMBEDDING_PROVIDER: "ollama"
+      LLM__OLLAMA__BASE_URL: "http://ollama:11434"
+      OTEL__EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL__SERVICE_NAME: "trendstorm-knowledge"
+    networks:
+      - trendstorm
+
+
+  # ---------------------------------------------------------------------------
+  # Analyst worker — hybrid retrieval + LLM analysis + validation
+  # ---------------------------------------------------------------------------
+  # Consumes analysis.pending.v1: runs the HybridRetriever (multi-query BM25 +
+  # vector + RRF + optional Cohere rerank + parent expansion), calls the LLM
+  # analyst via tool-use, runs the validator pass, persists the Analysis to
+  # Mongo, publishes analysis.completed.v1. The orchestrator then decides
+  # PUBLISH vs refine based on validator score + refinement budget.
+  #
+  # Required API keys (set in your .env.local — see .env.local.example):
+  #     LLM__ANTHROPIC_API_KEY   — primary analyst chat model
+  #     LLM__COHERE_API_KEY      — optional reranker (RRF fallback if absent)
+  #     GEMINI__API_KEY          — embedding provider for vector retrieval
+  # ---------------------------------------------------------------------------
+  analyst-worker:
+    build:
+      context: ..
+      dockerfile: docker/analyst.Dockerfile
+    image: trendstorm-analyst:local
+    restart: unless-stopped
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      APP__ENV: dev
+      APP__LOG_FORMAT: json
+      APP__LOG_LEVEL: INFO
+      MONGO__URI: "mongodb://root:rootpass@mongo:27017/?replicaSet=rs0&directConnection=true&authSource=admin"
+      KAFKA__BOOTSTRAP_SERVERS: "kafka:9092"
+      VECTOR__CHROMA_HOST: "chroma"
+      VECTOR__CHROMA_PORT: "8000"
+      LLM__DEFAULT_CHAT_PROVIDER: "anthropic"
+      LLM__DEFAULT_EMBEDDING_PROVIDER: "gemini"
+      LLM__OLLAMA__BASE_URL: "http://ollama:11434"
+      # Pass through API keys from the host env (set in .env.local).
+      LLM__ANTHROPIC_API_KEY: "${LLM__ANTHROPIC_API_KEY:-}"
+      LLM__COHERE_API_KEY: "${LLM__COHERE_API_KEY:-}"
+      LLM__OPENAI_API_KEY: "${LLM__OPENAI_API_KEY:-}"
+      GEMINI__API_KEY: "${GEMINI__API_KEY:-}"
+      OTEL__EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL__SERVICE_NAME: "trendstorm-analyst"
+    networks:
+      - trendstorm
+
+
+  # ---------------------------------------------------------------------------
+  # Publisher worker — report rendering + blob upload
+  # ---------------------------------------------------------------------------
+  # Consumes publish.pending.v1: loads Analysis + Category from Mongo, renders
+  # Markdown / JSON / PDF reports via weasyprint, uploads to MinIO, persists
+  # Report documents, emits stream events, publishes publish.completed.v1.
+  # ---------------------------------------------------------------------------
+  publisher-worker:
+    build:
+      context: ..
+      dockerfile: docker/publisher.Dockerfile
+    image: trendstorm-publisher:local
+    restart: unless-stopped
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      APP__ENV: dev
+      APP__LOG_FORMAT: json
+      APP__LOG_LEVEL: INFO
+      MONGO__URI: "mongodb://root:rootpass@mongo:27017/?replicaSet=rs0&directConnection=true&authSource=admin"
+      KAFKA__BOOTSTRAP_SERVERS: "kafka:9092"
+      REDIS__URL: "redis://redis:6379/0"
+      BLOB__ENDPOINT: "http://minio:9000"
+      BLOB__ACCESS_KEY: "minioadmin"
+      BLOB__SECRET_KEY: "minioadmin"
+      OTEL__EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL__SERVICE_NAME: "trendstorm-publisher"
+    networks:
+      - trendstorm
+
+
+  # ---------------------------------------------------------------------------
+  # SSE Coordinator worker — stream.partial.v1 → Redis Streams + Pub/Sub
+  # ---------------------------------------------------------------------------
+  # Consumes stream.partial.v1 from Kafka, assigns job-scoped seq numbers via
+  # Redis INCR, writes to Redis Streams (durable log for replay on reconnect)
+  # and Redis Pub/Sub (live fanout to connected SSE clients). Smallest worker
+  # in the fleet — base deps only, no LLM SDKs, no blob storage.
+  # ---------------------------------------------------------------------------
+  sse-coordinator-worker:
+    build:
+      context: ..
+      dockerfile: docker/sse_coordinator.Dockerfile
+    image: trendstorm-sse-coordinator:local
+    restart: unless-stopped
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+    environment:
+      APP__ENV: dev
+      APP__LOG_FORMAT: json
+      APP__LOG_LEVEL: INFO
+      MONGO__URI: "mongodb://root:rootpass@mongo:27017/?replicaSet=rs0&directConnection=true&authSource=admin"
+      KAFKA__BOOTSTRAP_SERVERS: "kafka:9092"
+      REDIS__URL: "redis://redis:6379/0"
+      OTEL__EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL__SERVICE_NAME: "trendstorm-sse-coordinator"
+    networks:
+      - trendstorm
+
+
+  # ---------------------------------------------------------------------------
+  # Production eval worker — evaluates 1%-sampled analyses from eval.sample.v1
+  # ---------------------------------------------------------------------------
+  production-eval-worker:
+    build:
+      context: ..
+      dockerfile: docker/production_eval.Dockerfile
+    image: trendstorm-production-eval:local
+    restart: unless-stopped
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      mongo-init:
+        condition: service_completed_successfully
+      chroma:
+        condition: service_healthy
+    environment:
+      APP__ENV: dev
+      APP__LOG_FORMAT: json
+      APP__LOG_LEVEL: INFO
+      MONGO__URI: "mongodb://root:rootpass@mongo:27017/?replicaSet=rs0&directConnection=true&authSource=admin"
+      KAFKA__BOOTSTRAP_SERVERS: "kafka:9092"
+      VECTOR__HOST: chroma
+      VECTOR__PORT: "8000"
+      LLM__DEFAULT_CHAT_PROVIDER: ${LLM__DEFAULT_CHAT_PROVIDER:-anthropic}
+      LLM__DEFAULT_EMBEDDING_PROVIDER: ${LLM__DEFAULT_EMBEDDING_PROVIDER:-gemini}
+      LLM__ANTHROPIC_API_KEY: ${LLM__ANTHROPIC_API_KEY:-}
+      LLM__OPENAI_API_KEY: ${LLM__OPENAI_API_KEY:-}
+      LLM__GEMINI_API_KEY: ${LLM__GEMINI_API_KEY:-}
+      LANGSMITH__API_KEY: ${LANGSMITH__API_KEY:-}
+      LANGSMITH__PROJECT: ${LANGSMITH__PROJECT:-trendstorm-prod}
+      EVAL__PANEL_JUDGES: ${EVAL__PANEL_JUDGES:-gpt-4.1-nano,gemini-2.5-flash,claude-haiku-4-5}
+      EVAL__MIN_QUORUM: "2"
+      OTEL__EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL__SERVICE_NAME: "trendstorm-production-eval"
+    networks:
+      - trendstorm
+
+
+  # ---------------------------------------------------------------------------
+  # Outbox relay worker — polls Mongo outbox + publishes to Kafka
+  # ---------------------------------------------------------------------------
+  # Runs the OutboxRelay polling loop (500ms tick). Reads pending OutboxEntry
+  # documents that JobService wrote inside a Mongo transaction, publishes them
+  # to Kafka, then marks them published. Smallest write-path worker: only
+  # Mongo + Kafka, no LLM SDKs, no vector store.
+  # ---------------------------------------------------------------------------
+  outbox-relay-worker:
+    build:
+      context: ..
+      dockerfile: docker/outbox_relay.Dockerfile
+    image: trendstorm-outbox-relay:local
+    container_name: trendstorm-outbox-relay
+    restart: unless-stopped
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      APP__ENV: dev
+      APP__LOG_FORMAT: json
+      APP__LOG_LEVEL: INFO
+      MONGO__URI: "mongodb://root:rootpass@mongo:27017/?replicaSet=rs0&directConnection=true&authSource=admin"
+      KAFKA__BOOTSTRAP_SERVERS: "kafka:9092"
+      OTEL__EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL__SERVICE_NAME: "trendstorm-outbox-relay"
+    networks:
+      - trendstorm
+
+
+networks:
+  trendstorm:
+    # `external: true` joins the network created by docker-compose.yml.
+    # Without this, this compose file would create a SEPARATE network and
+    # the api/worker couldn't reach mongo/kafka.
+    # The base compose uses `name: trendstorm` as the project name AND
+    # `networks: trendstorm`, so Docker names the network "trendstorm_trendstorm".
+    external: true
+    name: trendstorm_trendstorm

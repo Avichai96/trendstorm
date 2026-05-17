@@ -1,0 +1,80 @@
+{
+  "id": "01JVAI_GOLDEN_GOV_001",
+  "name": "ai_governance",
+  "description": "Analyst must surface EU AI Act risk tiers, frontier model compute thresholds, and mandatory incident reporting as distinct governance findings.",
+  "tenant_id": "golden-tenant",
+  "category_name": "AI Governance & Policy",
+  "category_description": "Regulatory developments, policy frameworks, and international coordination efforts governing the development and deployment of artificial intelligence systems.",
+  "category_keywords": ["EU AI Act", "frontier models", "compute threshold", "incident reporting", "risk tiers", "regulation"],
+  "chunks": [
+    {
+      "chunk_id": "gov_c01",
+      "document_id": "gov_doc_01",
+      "source_id": "gov_src_01",
+      "source_url": "https://example-policy.ai/eu-ai-act-risk-tiers",
+      "text": "The EU AI Act establishes a four-tier risk classification for AI systems: unacceptable risk (banned outright), high risk (mandatory conformity assessment), limited risk (transparency obligations), and minimal risk (no obligations). Systems in the unacceptable risk category include real-time biometric surveillance in public spaces, social scoring by governments, and AI used to manipulate behavior through subliminal techniques. High-risk systems span critical infrastructure, education, employment decisions, law enforcement, and migration. The risk tier assigned to a system determines the compliance burden: high-risk systems require technical documentation, human oversight measures, and registration in an EU database before market placement."
+    },
+    {
+      "chunk_id": "gov_c02",
+      "document_id": "gov_doc_02",
+      "source_id": "gov_src_01",
+      "source_url": "https://example-policy.ai/eu-ai-act-frontier",
+      "text": "The EU AI Act introduced specific provisions for general-purpose AI (GPAI) models, with heightened obligations for models trained above a compute threshold of 10^25 floating point operations. Models crossing this threshold are classified as 'GPAI models with systemic risk' and must undergo adversarial testing, incident reporting to the European AI Office, and cybersecurity assessments. The 10^25 FLOP threshold was chosen as a proxy for capability, though critics have noted that inference-time compute and architectural innovations may allow highly capable models to be trained below the threshold. The European AI Office has signaled it will update the threshold periodically as hardware efficiency improves."
+    },
+    {
+      "chunk_id": "gov_c03",
+      "document_id": "gov_doc_03",
+      "source_id": "gov_src_02",
+      "source_url": "https://example-policy.ai/ai-incident-reporting",
+      "text": "Mandatory incident reporting for AI systems is emerging as a common thread across multiple regulatory frameworks. Under the EU AI Act, providers of high-risk AI systems must report serious incidents — defined as incidents resulting in death, serious harm, or significant property damage — to market surveillance authorities within 15 working days. The US AI Safety Institute has proposed a voluntary incident reporting framework, though several members of Congress have called for mandatory reporting requirements similar to those for cyber incidents under CIRCIA. Japan's AI governance approach relies on industry self-reporting with government guidance rather than mandatory requirements. The divergence in reporting mandates creates compliance complexity for AI providers operating across jurisdictions."
+    },
+    {
+      "chunk_id": "gov_c04",
+      "document_id": "gov_doc_04",
+      "source_id": "gov_src_03",
+      "source_url": "https://example-policy.ai/international-ai-coordination",
+      "text": "International coordination on AI governance has accelerated since 2023, with the G7 Hiroshima Process establishing voluntary code-of-conduct principles for advanced AI developers, and the UK AI Safety Institute publishing evaluation frameworks adopted by counterpart institutes in the US, Japan, and the EU. However, coordination has not produced binding international agreements. The UN Advisory Body on AI recommended a new international scientific panel modeled on the IPCC, but implementation faces opposition from states concerned about sovereignty over AI governance decisions. Bilateral agreements — such as the US-UK AI Safety MOU — have moved faster than multilateral negotiations, creating a patchwork of overlapping commitments without a unified global framework."
+    },
+    {
+      "chunk_id": "gov_c05",
+      "document_id": "gov_doc_05",
+      "source_id": "gov_src_04",
+      "source_url": "https://example-policy.ai/compute-governance",
+      "text": "Compute governance has emerged as a distinct policy lever alongside model-level and deployment-level regulation. Because frontier AI training runs require specialized hardware (primarily NVIDIA H100/H200 GPUs) sourced from a small number of manufacturers, export controls on advanced semiconductors offer a chokepoint that can be enforced without requiring visibility into model weights or training data. The US Bureau of Industry and Security has implemented tiered export controls covering advanced chips, with the tightest restrictions applied to countries of concern. Researchers have proposed cloud compute registries — mandatory disclosure of large training runs to a government body — as a complementary measure that would allow regulators to monitor frontier development without inspecting proprietary model weights."
+    }
+  ],
+  "expected_analysis": {
+    "summary_keywords": ["EU AI Act", "risk tiers", "frontier models", "compute threshold", "regulation", "governance"],
+    "insights": [
+      {
+        "claim": "The EU AI Act establishes four risk tiers for AI systems — unacceptable, high, limited, and minimal — with mandatory conformity assessments and EU database registration required for high-risk systems.",
+        "required": true,
+        "keywords": ["EU AI Act", "risk tiers", "high risk", "conformity assessment"]
+      },
+      {
+        "claim": "Models trained above 10^25 FLOPs are classified as GPAI models with systemic risk under the EU AI Act, requiring adversarial testing, incident reporting, and cybersecurity assessments.",
+        "required": true,
+        "keywords": ["GPAI", "10^25 FLOPs", "systemic risk", "adversarial testing", "compute threshold"]
+      },
+      {
+        "claim": "Mandatory AI incident reporting requirements are diverging across jurisdictions, with the EU requiring 15-day reporting for serious incidents while the US and Japan rely on voluntary frameworks.",
+        "required": true,
+        "keywords": ["incident reporting", "mandatory", "EU", "US", "jurisdictions"]
+      },
+      {
+        "claim": "Compute governance via semiconductor export controls and proposed cloud compute registries offers regulators a hardware-level enforcement mechanism that does not require access to model weights.",
+        "required": false,
+        "keywords": ["compute governance", "export controls", "semiconductors", "cloud compute registry"]
+      }
+    ],
+    "min_citations": 3
+  },
+  "metadata": {
+    "curated_by": "trendstorm-team",
+    "curated_at": "2026-05-25",
+    "domain": "AI policy",
+    "difficulty": "easy",
+    "notes": "Deliberately easier than the AI safety examples — the three required insights map cleanly to three separate chunks with minimal conceptual overlap. Good regression test for basic grounding and citation accuracy."
+  },
+  "created_at": "2026-05-25T00:00:00+00:00"
+}

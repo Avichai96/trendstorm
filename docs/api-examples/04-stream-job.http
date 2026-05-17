@@ -1,0 +1,19 @@
+@host = http://localhost:8080
+@tenant = test-tenant-01
+# Paste the job id returned from 03-create-job.http
+@job_id = PASTE_JOB_ID_HERE
+
+### Stream job progress via SSE
+# Events: STAGE_STARTED, CHUNK_DELTA, REPORT_READY (terminal), JOB_FAILED (terminal)
+# Use Last-Event-ID header to resume from a specific sequence number
+GET {{host}}/v1/jobs/{{job_id}}/stream
+Accept: text/event-stream
+X-Tenant-ID: {{tenant}}
+
+###
+
+### Resume SSE from sequence 5
+GET {{host}}/v1/jobs/{{job_id}}/stream
+Accept: text/event-stream
+X-Tenant-ID: {{tenant}}
+Last-Event-ID: 5

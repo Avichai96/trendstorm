@@ -1,0 +1,27 @@
+@host = http://localhost:8080
+@tenant = test-tenant-01
+# Paste the id returned from 01-create-category.http
+@category_id = PASTE_CATEGORY_ID_HERE
+
+### Create a trend analysis job
+# Returns 202 with a job id and stream_url
+POST {{host}}/v1/jobs
+Content-Type: application/json
+X-Tenant-ID: {{tenant}}
+
+{
+  "category_id": "{{category_id}}"
+}
+
+###
+
+### Check job status
+# Paste the job id from the response above
+GET {{host}}/v1/jobs/PASTE_JOB_ID_HERE
+X-Tenant-ID: {{tenant}}
+
+###
+
+### List jobs
+GET {{host}}/v1/jobs
+X-Tenant-ID: {{tenant}}

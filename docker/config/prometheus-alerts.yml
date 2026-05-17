@@ -1,0 +1,223 @@
+# Prometheus alert rules for TrendStorm AI.
+# Each alert links to a runbook in ops/runbooks/.
+#
+# Severity levels:
+#   page    — wake someone up (PagerDuty / on-call)
+#   warning — Slack notification; investigate next business day
+#
+# Label cardinality: never add job_id/document_id/etc. to alert labels.
+# Alert labels drive routing; keep them bounded.
+
+groups:
+  # --------------------------------------------------------------------------
+  # DLQ spike — messages accumulating in dead-letter queue
+  # --------------------------------------------------------------------------
+  - name: dlq
+    rules:
+      - alert: DLQSpikeHigh
+        expr: |
+          sum(rate(trendstorm_kafka_consumer_lag_messages{topic="dlq.v1"}[5m])) > 5
+        for: 2m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "DLQ receiving > 5 messages/min for 2 minutes"
+          description: |
+            The dead-letter queue is accumulating messages at {{ $value | printf "%.1f" }}/min.
+            Check which worker is producing DLQ entries and why.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/dlq-spike.md"
+
+      - alert: DLQSpikeWarning
+        expr: |
+          sum(rate(trendstorm_kafka_consumer_lag_messages{topic="dlq.v1"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "DLQ receiving > 1 message/min for 5 minutes"
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/dlq-spike.md"
+
+  # --------------------------------------------------------------------------
+  # Analyst latency SLO — p99 < 300s over 5m window
+  # --------------------------------------------------------------------------
+  - name: analyst_slo
+    rules:
+      - alert: AnalystLatencyP99Page
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(trendstorm_analyst_pass_duration_seconds_bucket[5m])) by (le)
+          ) > 300
+        for: 5m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "Analyst p99 latency > 300s (SLO breach)"
+          description: |
+            The analyst worker's p99 pass duration is {{ $value | printf "%.0f" }}s,
+            exceeding the 300s SLO. Check LLM provider latency and Kafka consumer lag.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/analyst-latency.md"
+
+      - alert: AnalystLatencyP99Warning
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(trendstorm_analyst_pass_duration_seconds_bucket[5m])) by (le)
+          ) > 180
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Analyst p99 latency > 180s (warn threshold)"
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/analyst-latency.md"
+
+  # --------------------------------------------------------------------------
+  # Publisher latency SLO — p99 < 60s over 5m window
+  # --------------------------------------------------------------------------
+  - name: publisher_slo
+    rules:
+      - alert: PublisherLatencyP99Page
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(trendstorm_publisher_render_duration_seconds_bucket[5m])) by (le)
+          ) > 60
+        for: 5m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "Publisher p99 render latency > 60s (SLO breach)"
+          description: |
+            Publisher render p99 is {{ $value | printf "%.0f" }}s. MinIO upload or
+            Weasyprint PDF rendering may be stalled.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/publisher-latency.md"
+
+  # --------------------------------------------------------------------------
+  # API latency SLO — p99 < 2s for non-streaming endpoints
+  # --------------------------------------------------------------------------
+  - name: api_slo
+    rules:
+      - alert: APILatencyP99Page
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum(rate(trendstorm_api_request_duration_seconds_bucket{operation!="stream_sse"}[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "API p99 latency > 2s (SLO breach)"
+          description: |
+            Non-streaming API p99 is {{ $value | printf "%.2f" }}s.
+            Check MongoDB connection pool utilization and Redis health.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/api-latency.md"
+
+      - alert: APIErrorRateHigh
+        expr: |
+          sum(rate(trendstorm_api_requests_total{status=~"error|permanent_error"}[5m]))
+          / sum(rate(trendstorm_api_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "API error rate > 5% for 5 minutes"
+          description: |
+            API is returning errors at {{ $value | printf "%.1%%" }} rate.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/api-latency.md"
+
+  # --------------------------------------------------------------------------
+  # LLM rate limiting — persistent rate limit errors
+  # --------------------------------------------------------------------------
+  - name: llm_rate_limits
+    rules:
+      - alert: LLMRateLimitSustained
+        expr: |
+          sum(rate(trendstorm_llm_calls_total{status="permanent_error"}[5m])) by (provider)
+          / sum(rate(trendstorm_llm_calls_total[5m])) by (provider) > 0.10
+        for: 3m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "LLM permanent error rate > 10% for {{ $labels.provider }}"
+          description: |
+            {{ $labels.provider }} is failing at {{ $value | printf "%.1%%" }} rate.
+            Check API key validity, quota, and model availability.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/llm-rate-limit.md"
+
+  # --------------------------------------------------------------------------
+  # Kafka consumer lag — workers falling behind
+  # --------------------------------------------------------------------------
+  - name: kafka_lag
+    rules:
+      - alert: KafkaConsumerLagHigh
+        expr: |
+          sum(trendstorm_kafka_consumer_lag_messages) by (service, topic) > 1000
+        for: 5m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "{{ $labels.service }} lag > 1000 on {{ $labels.topic }}"
+          description: |
+            Consumer {{ $labels.service }} is {{ $value }} messages behind on
+            {{ $labels.topic }}. Worker may be crashing or processing very slowly.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/kafka-lag.md"
+
+      - alert: KafkaConsumerLagWarning
+        expr: |
+          sum(trendstorm_kafka_consumer_lag_messages) by (service, topic) > 200
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "{{ $labels.service }} lag > 200 on {{ $labels.topic }}"
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/kafka-lag.md"
+
+  # --------------------------------------------------------------------------
+  # ChromaDB health — vector store down
+  # --------------------------------------------------------------------------
+  - name: vector_store
+    rules:
+      - alert: ChromaDBUnhealthy
+        expr: |
+          min(trendstorm_vector_store_health) by (service) < 1
+        for: 2m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "ChromaDB health check failing on {{ $labels.service }}"
+          description: |
+            The vector store health gauge is {{ $value }} (expected 1).
+            Knowledge worker and analyst retrieval are degraded.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/chromadb-health.md"
+
+  # --------------------------------------------------------------------------
+  # Mongo connection pool saturation
+  # --------------------------------------------------------------------------
+  - name: mongo_pool
+    rules:
+      - alert: MongoPoolSaturated
+        expr: |
+          max(trendstorm_mongo_pool_utilization_ratio) by (service) > 0.9
+        for: 5m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "Mongo pool > 90% utilised on {{ $labels.service }}"
+          description: |
+            Pool utilization is {{ $value | printf "%.0%%" }} on {{ $labels.service }}.
+            Requests will queue and latency will spike. Scale connection pool or
+            investigate slow queries holding connections.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/mongo-pool.md"

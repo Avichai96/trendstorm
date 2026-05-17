@@ -1,0 +1,80 @@
+{
+  "id": "01JVAI_GOLDEN_INTERP_001",
+  "name": "llm_interpretability",
+  "description": "Analyst must surface mechanistic interpretability findings: superposition, sparse autoencoders, and circuit-level analysis, grounded in the provided corpus.",
+  "tenant_id": "golden-tenant",
+  "category_name": "LLM Interpretability",
+  "category_description": "Research into understanding the internal representations and computations of large language models, including mechanistic interpretability, probing, and feature visualization.",
+  "category_keywords": ["mechanistic interpretability", "superposition", "sparse autoencoders", "circuits", "features", "activation patching"],
+  "chunks": [
+    {
+      "chunk_id": "interp_c01",
+      "document_id": "interp_doc_01",
+      "source_id": "interp_src_01",
+      "source_url": "https://example-research.ai/superposition-hypothesis",
+      "text": "The superposition hypothesis proposes that neural networks store more features than they have dimensions by representing multiple features in superposed, nearly-orthogonal directions in activation space. This allows a network to use a relatively small number of neurons to represent a large number of sparse features simultaneously. The cost is interference: when multiple features that co-occur are active simultaneously, their superposed representations partially interfere. Empirical support for superposition comes from studies showing that networks trained on synthetic sparse feature datasets develop polysemantic neurons — individual neurons that respond to multiple semantically unrelated concepts. This challenges the earlier assumption that individual neurons represent single, interpretable concepts."
+    },
+    {
+      "chunk_id": "interp_c02",
+      "document_id": "interp_doc_02",
+      "source_id": "interp_src_01",
+      "source_url": "https://example-research.ai/sparse-autoencoders",
+      "text": "Sparse autoencoders (SAEs) have emerged as a practical tool for decomposing polysemantic neural network representations into monosemantic features. An SAE is trained to reconstruct a model's internal activations using a sparse linear combination of learned dictionary features, with an L1 penalty encouraging sparsity. The resulting dictionary features tend to be more interpretable than the raw neuron activations — each feature responds to a coherent semantic concept such as a specific programming language pattern or a named entity type. SAEs trained on transformer residual stream activations have revealed features corresponding to fine-grained concepts that were not visible at the neuron level, suggesting that the underlying representations are more structured than raw polysemanticity implies."
+    },
+    {
+      "chunk_id": "interp_c03",
+      "document_id": "interp_doc_03",
+      "source_id": "interp_src_02",
+      "source_url": "https://example-research.ai/circuit-analysis",
+      "text": "Circuit-level interpretability aims to identify the minimal subgraph of a neural network's attention heads and MLP neurons responsible for a specific capability or behavior. The method involves activation patching: systematically replacing activations at specific positions with those from a reference run to measure the causal contribution of each component. Studies have identified circuits for capabilities including indirect object identification, greater-than comparisons, and docstring completion in GPT-2. A key finding is that circuits are often surprisingly small — a handful of attention heads and MLP layers — and that many model parameters are not causally relevant to specific behaviors. This raises the possibility that large models contain many overlapping circuits that can be isolated and studied independently."
+    },
+    {
+      "chunk_id": "interp_c04",
+      "document_id": "interp_doc_04",
+      "source_id": "interp_src_03",
+      "source_url": "https://example-research.ai/feature-steering",
+      "text": "Feature steering uses the features identified by sparse autoencoders to directly manipulate model behavior at inference time. By adding a scaled version of a feature direction to the model's residual stream activations, researchers can predictably amplify or suppress the corresponding behavior. Experiments have demonstrated that steering on features associated with concepts like 'danger' or 'deception' produces coherent thematic changes in generated text, while steering on less semantically loaded features produces subtler effects. Feature steering provides a more targeted intervention than activation addition at the token level because SAE features correspond to interpretable concepts rather than raw activation patterns. This has implications for both safety research and potential runtime alignment interventions."
+    },
+    {
+      "chunk_id": "interp_c05",
+      "document_id": "interp_doc_05",
+      "source_id": "interp_src_04",
+      "source_url": "https://example-research.ai/probing-limitations",
+      "text": "Linear probing — training a linear classifier on internal activations to predict a property of the input — has been a standard tool for interpretability research for several years. However, recent work has raised concerns about what probes actually measure. A probe can achieve high accuracy even when the property it targets is not causally relevant to the model's output: the model may encode the property as a side effect of its computation without using it. Causal probing and activation patching experiments suggest that many properties detectable by linear probes do not play a functional role in the model's generation process. This has shifted the interpretability community toward causal methods (activation patching, feature steering) as more reliable evidence of mechanistic relevance than correlation-based probing."
+    }
+  ],
+  "expected_analysis": {
+    "summary_keywords": ["superposition", "sparse autoencoders", "circuits", "interpretability", "features"],
+    "insights": [
+      {
+        "claim": "The superposition hypothesis explains polysemantic neurons by proposing that neural networks compress many sparse features into fewer dimensions, causing individual neurons to respond to multiple unrelated concepts.",
+        "required": true,
+        "keywords": ["superposition", "polysemantic", "features", "neurons"]
+      },
+      {
+        "claim": "Sparse autoencoders decompose polysemantic activations into monosemantic dictionary features using an L1 sparsity penalty, revealing more interpretable representations than raw neuron activations.",
+        "required": true,
+        "keywords": ["sparse autoencoders", "monosemantic", "dictionary features", "sparsity"]
+      },
+      {
+        "claim": "Circuit-level interpretability uses activation patching to identify the minimal subgraph of attention heads and MLP neurons causally responsible for a specific model capability.",
+        "required": true,
+        "keywords": ["circuits", "activation patching", "attention heads", "causal"]
+      },
+      {
+        "claim": "Feature steering adds SAE feature directions to residual stream activations at inference time, enabling targeted behavioral manipulation aligned with interpretable semantic concepts.",
+        "required": false,
+        "keywords": ["feature steering", "residual stream", "behavioral manipulation"]
+      }
+    ],
+    "min_citations": 3
+  },
+  "metadata": {
+    "curated_by": "trendstorm-team",
+    "curated_at": "2026-05-25",
+    "domain": "AI interpretability",
+    "difficulty": "medium-hard",
+    "notes": "The probing-limitations chunk (interp_c05) is deliberately not required in expected_analysis to test that the analyst can prioritize the three core mechanistic findings. An analysis that covers probing limitations as optional context is acceptable."
+  },
+  "created_at": "2026-05-25T00:00:00+00:00"
+}

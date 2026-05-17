@@ -1,0 +1,272 @@
+# TrendStorm Helm chart values.
+# Override these in values-production.yaml or via --set on the CLI.
+
+global:
+  # Image registry prefix (e.g. "ghcr.io/trendstorm")
+  imageRegistry: ""
+  imageTag: "latest"
+  imagePullPolicy: IfNotPresent
+  # Common environment variables injected into every container.
+  # Infrastructure connection strings come from ExternalSecret → Secret.
+  env:
+    APP__ENV: production
+    APP__LOG_FORMAT: json
+    APP__LOG_LEVEL: INFO
+
+# ---------------------------------------------------------------------------
+# API
+# ---------------------------------------------------------------------------
+api:
+  enabled: true
+  replicaCount: 2
+  image:
+    name: trendstorm-api
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+  env:
+    AUTH__MODE: key_or_oauth
+
+# ---------------------------------------------------------------------------
+# Orchestrator worker
+# ---------------------------------------------------------------------------
+orchestratorWorker:
+  enabled: true
+  replicaCount: 2
+  image:
+    name: trendstorm-orchestrator
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  # HPA driven by Kafka consumer lag (KEDA ScaledObject)
+  keda:
+    enabled: true
+    minReplicaCount: 1
+    maxReplicaCount: 6
+    lagThreshold: "100"
+    topic: trendstorm.jobs.requested.v1
+    consumerGroup: trendstorm-orchestrator
+
+# ---------------------------------------------------------------------------
+# Scout worker
+# ---------------------------------------------------------------------------
+scoutWorker:
+  enabled: true
+  replicaCount: 2
+  image:
+    name: trendstorm-scout
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"
+      memory: "1Gi"
+  keda:
+    enabled: true
+    minReplicaCount: 1
+    maxReplicaCount: 12
+    lagThreshold: "50"
+    topic: trendstorm.ingest.pending.v1
+    consumerGroup: trendstorm-scout
+
+# ---------------------------------------------------------------------------
+# Knowledge worker
+# ---------------------------------------------------------------------------
+knowledgeWorker:
+  enabled: true
+  replicaCount: 2
+  image:
+    name: trendstorm-knowledge
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
+  keda:
+    enabled: true
+    minReplicaCount: 1
+    maxReplicaCount: 8
+    lagThreshold: "50"
+    topic: trendstorm.knowledge.pending.v1
+    consumerGroup: trendstorm-knowledge
+
+# ---------------------------------------------------------------------------
+# Analyst worker
+# ---------------------------------------------------------------------------
+analystWorker:
+  enabled: true
+  replicaCount: 2
+  image:
+    name: trendstorm-analyst
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
+  keda:
+    enabled: true
+    minReplicaCount: 1
+    maxReplicaCount: 8
+    lagThreshold: "20"
+    topic: trendstorm.analysis.pending.v1
+    consumerGroup: trendstorm-analyst
+
+# ---------------------------------------------------------------------------
+# Publisher worker
+# ---------------------------------------------------------------------------
+publisherWorker:
+  enabled: true
+  replicaCount: 2
+  image:
+    name: trendstorm-publisher
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  keda:
+    enabled: true
+    minReplicaCount: 1
+    maxReplicaCount: 4
+    lagThreshold: "20"
+    topic: trendstorm.publish.pending.v1
+    consumerGroup: trendstorm-publisher
+
+# ---------------------------------------------------------------------------
+# SSE coordinator worker
+# ---------------------------------------------------------------------------
+sseCoordinatorWorker:
+  enabled: true
+  replicaCount: 2
+  image:
+    name: trendstorm-sse-coordinator
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  keda:
+    enabled: true
+    minReplicaCount: 1
+    maxReplicaCount: 4
+    lagThreshold: "100"
+    topic: trendstorm.stream.partial.v1
+    consumerGroup: trendstorm-sse-coordinator
+
+# ---------------------------------------------------------------------------
+# Outbox relay worker
+# ---------------------------------------------------------------------------
+outboxRelayWorker:
+  enabled: true
+  replicaCount: 1   # single-writer; no Kafka lag scaling
+  image:
+    name: trendstorm-outbox-relay
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ---------------------------------------------------------------------------
+# Production eval worker
+# ---------------------------------------------------------------------------
+productionEvalWorker:
+  enabled: true
+  replicaCount: 1
+  image:
+    name: trendstorm-production-eval
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  keda:
+    enabled: true
+    minReplicaCount: 1
+    maxReplicaCount: 4
+    lagThreshold: "10"
+    topic: trendstorm.eval.sample.v1
+    consumerGroup: trendstorm-production-eval
+
+# ---------------------------------------------------------------------------
+# Ingress
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+  hosts:
+    - host: api.trendstorm.ai
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: trendstorm-tls
+      hosts:
+        - api.trendstorm.ai
+
+# ---------------------------------------------------------------------------
+# External secret references (ExternalSecret operator)
+# ---------------------------------------------------------------------------
+externalSecrets:
+  enabled: true
+  # The SecretStore name configured in the cluster (points to AWS SSM/Vault/etc.)
+  secretStoreName: trendstorm-secret-store
+  refreshInterval: 1h
+
+# ---------------------------------------------------------------------------
+# Service Account
+# ---------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: trendstorm
+  annotations: {}
+
+# ---------------------------------------------------------------------------
+# Shared Kafka bootstrap (read from ExternalSecret in practice)
+# ---------------------------------------------------------------------------
+kafka:
+  bootstrapServers: "kafka:9092"
+
+# KEDA Kafka trigger authentication (Kafka ScaledObject)
+keda:
+  kafkaBroker: "kafka:9092"
+
+# ---------------------------------------------------------------------------
+# Linkerd service mesh (optional)
+# ---------------------------------------------------------------------------
+linkerd:
+  # Set to true to inject linkerd proxies into all pods.
+  # Requires linkerd CLI and CRDs installed in the cluster.
+  inject: false

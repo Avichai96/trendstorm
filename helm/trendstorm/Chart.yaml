@@ -1,0 +1,16 @@
+apiVersion: v2
+name: trendstorm
+description: TrendStorm AI — autonomous multi-agent trend intelligence platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - ai
+  - trend-intelligence
+  - multi-agent
+  - rag
+
+maintainers:
+  - name: TrendStorm Engineering
+    email: eng@trendstorm.ai

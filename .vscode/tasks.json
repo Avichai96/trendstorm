@@ -1,0 +1,162 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Up: Infrastructure",
+      "type": "shell",
+      "command": "make up",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Up: Observability",
+      "type": "shell",
+      "command": "make up-obs",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Up: Application (api + workers)",
+      "type": "shell",
+      "command": "make up-app",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Up: Everything",
+      "type": "shell",
+      "command": "make up-all",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Down: Everything",
+      "type": "shell",
+      "command": "make down",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Seed Mongo Indexes",
+      "type": "shell",
+      "command": "make seed-indexes",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Health Check",
+      "type": "shell",
+      "command": "make check",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Smoke Test (end-to-end)",
+      "type": "shell",
+      "command": "make smoke",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Test: Unit",
+      "type": "shell",
+      "command": "make test",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": ["$python"],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Test: Integration",
+      "type": "shell",
+      "command": "make test-integration",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Test: All",
+      "type": "shell",
+      "command": "make test-all",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Lint",
+      "type": "shell",
+      "command": "make lint",
+      "problemMatcher": [
+        {
+          "owner": "ruff",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": "^(.+):(\\d+):(\\d+):\\s+(\\w+)\\s+(.+)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "severity": 4,
+            "message": 5
+          }
+        }
+      ],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Format",
+      "type": "shell",
+      "command": "make format",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Typecheck",
+      "type": "shell",
+      "command": "make typecheck",
+      "problemMatcher": ["$mypy"],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Check All (lint + typecheck + test)",
+      "type": "shell",
+      "command": "make check-all",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "Eval: Fast",
+      "type": "shell",
+      "command": "make eval-fast",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Eval: Full",
+      "type": "shell",
+      "command": "make eval-full",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "Logs: Pick service",
+      "type": "shell",
+      "command": "make logs-${input:serviceName}",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "serviceName",
+      "type": "pickString",
+      "description": "Which service to tail?",
+      "options": [
+        "api",
+        "worker",
+        "scout",
+        "mongo",
+        "kafka"
+      ]
+    }
+  ]
+}

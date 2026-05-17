@@ -1,0 +1,243 @@
+# NetworkPolicies for the trendstorm namespace.
+#
+# Default-deny posture: all ingress and egress is blocked unless explicitly
+# permitted by a policy. This follows the Kubernetes network policy best practice
+# of explicitly allowlisting traffic flows rather than relying on "no policy = allow".
+#
+# Traffic model:
+#   Internet → nginx-ingress → api (port 8080)
+#   api → kafka (port 9092), mongo (27017), redis (6379)
+#   workers → kafka, mongo, redis (same pattern as api)
+#   analyst-worker → chroma (port 8000), external LLM APIs (port 443)
+#   knowledge-worker → chroma (port 8000), minio (9000)
+#   scout-worker → minio (9000), external HTTP (port 80/443)
+#   prometheus → all pods on port 9090 (metrics scrape)
+#
+# Namespace labels assumed:
+#   trendstorm namespace: app.kubernetes.io/part-of=trendstorm
+#   ingress-nginx namespace: kubernetes.io/metadata.name=ingress-nginx
+#   monitoring namespace: kubernetes.io/metadata.name=monitoring
+
+---
+# Default deny all ingress to the trendstorm namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: trendstorm
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+
+---
+# Default deny all egress from the trendstorm namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: trendstorm
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+
+---
+# Allow DNS egress (required for all pods to resolve service names)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: trendstorm
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+---
+# Allow ingress to the API from nginx-ingress only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-api
+  namespace: trendstorm
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8080
+          protocol: TCP
+
+---
+# Allow Prometheus (monitoring namespace) to scrape metrics from all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: trendstorm
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 9090
+          protocol: TCP
+
+---
+# Allow all trendstorm pods to reach Kafka
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kafka-egress
+  namespace: trendstorm
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 9092
+          protocol: TCP
+        - port: 9093
+          protocol: TCP
+
+---
+# Allow all trendstorm pods to reach MongoDB
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-mongo-egress
+  namespace: trendstorm
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 27017
+          protocol: TCP
+
+---
+# Allow all trendstorm pods to reach Redis
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-egress
+  namespace: trendstorm
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 6379
+          protocol: TCP
+
+---
+# Allow knowledge-worker and analyst-worker to reach ChromaDB
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-chroma-egress
+  namespace: trendstorm
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - knowledge-worker
+          - analyst-worker
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 8000
+          protocol: TCP
+
+---
+# Allow scout-worker, knowledge-worker, publisher-worker to reach MinIO/S3
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-minio-egress
+  namespace: trendstorm
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - scout-worker
+          - knowledge-worker
+          - publisher-worker
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 9000
+          protocol: TCP
+        - port: 443
+          protocol: TCP   # AWS S3
+
+---
+# Allow analyst-worker and knowledge-worker to reach external LLM APIs (HTTPS)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-llm-api-egress
+  namespace: trendstorm
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - analyst-worker
+          - knowledge-worker
+          - api
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 443
+          protocol: TCP
+
+---
+# Allow scout-worker to reach external HTTP/HTTPS (web fetching)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scout-external-egress
+  namespace: trendstorm
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: scout-worker
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - port: 80
+          protocol: TCP
+        - port: 443
+          protocol: TCP

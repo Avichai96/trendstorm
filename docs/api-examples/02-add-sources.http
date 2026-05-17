@@ -1,0 +1,34 @@
+@host = http://localhost:8080
+@tenant = test-tenant-01
+# Paste the id returned from 01-create-category.http
+@category_id = PASTE_CATEGORY_ID_HERE
+
+### Add an RSS source
+POST {{host}}/v1/sources
+Content-Type: application/json
+X-Tenant-ID: {{tenant}}
+
+{
+  "category_id": "{{category_id}}",
+  "url": "https://arxiv.org/rss/cs.AI",
+  "name": "arXiv CS.AI feed"
+}
+
+###
+
+### Add a web page source
+POST {{host}}/v1/sources
+Content-Type: application/json
+X-Tenant-ID: {{tenant}}
+
+{
+  "category_id": "{{category_id}}",
+  "url": "https://www.alignmentforum.org",
+  "name": "Alignment Forum"
+}
+
+###
+
+### List sources for the category
+GET {{host}}/v1/sources?category_id={{category_id}}
+X-Tenant-ID: {{tenant}}

@@ -1,0 +1,143 @@
+# ==============================================================================
+# TrendStorm AI — Observability Overlay
+# ==============================================================================
+# Adds the full OTel → Tempo/Jaeger/Prometheus/Loki → Grafana pipeline.
+# Heavy (~2GB RAM). Use only when working on tracing/metrics features.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.obs.yml up -d
+# ==============================================================================
+
+name: trendstorm
+
+networks:
+  trendstorm:
+    external: false  # joined from base compose
+
+volumes:
+  prometheus-data:
+  loki-data:
+  grafana-data:
+
+services:
+
+  # ============================================================================
+  # OpenTelemetry Collector — the funnel
+  # ----------------------------------------------------------------------------
+  # Receives OTLP from all app services. Splits the stream:
+  #   traces  -> Jaeger
+  #   metrics -> Prometheus (via remote_write or pull)
+  #   logs    -> Loki
+  # Why a collector instead of direct exports?
+  #   - Single SDK config in apps; backend changes don't require app redeploys.
+  #   - Sampling, batching, attribute scrubbing happen in one place.
+  #   - In prod, swap Jaeger for Tempo without touching app code.
+  # ============================================================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    container_name: trendstorm-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes:
+      - ./config/otel-collector.yaml:/etc/otel-collector.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Collector self-metrics
+      - "8889:8889"   # Prometheus exporter (scraped by Prometheus)
+    networks:
+      - trendstorm
+    depends_on:
+      - jaeger
+      - loki
+
+  # ============================================================================
+  # Jaeger — distributed traces
+  # ----------------------------------------------------------------------------
+  # In production we'd use Tempo (object-store-backed, cheaper at scale).
+  # Jaeger is simpler for dev and has a nicer built-in UI.
+  # ============================================================================
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    container_name: trendstorm-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # UI
+      - "14250:14250"  # gRPC (collector receives from OTel)
+    networks:
+      - trendstorm
+
+  # ============================================================================
+  # Prometheus — metrics
+  # ----------------------------------------------------------------------------
+  # Scrapes:
+  #   - otel-collector:8889 (forwarded app metrics)
+  #   - kafka, mongo exporters (added later as needed)
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    container_name: trendstorm-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"  # POST /-/reload to hot-reload config
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/prometheus-alerts.yml:/etc/prometheus/alerts/trendstorm.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - trendstorm
+
+  # ============================================================================
+  # Loki — log aggregation
+  # ----------------------------------------------------------------------------
+  # We send structured JSON logs from apps via OTel logs pipeline → Loki.
+  # Loki indexes labels (service, env, level), not log contents — cheap at scale.
+  # ============================================================================
+  loki:
+    image: grafana/loki:3.3.0
+    container_name: trendstorm-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - ./config/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - trendstorm
+
+  # ============================================================================
+  # Grafana — visualization
+  # ----------------------------------------------------------------------------
+  # Pre-provisioned datasources for Prometheus, Loki, Jaeger.
+  # In prod, dashboards-as-code (JSON) committed to repo.
+  # ============================================================================
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: trendstorm-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_FEATURE_TOGGLES_ENABLE: "traceqlEditor"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - trendstorm
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger

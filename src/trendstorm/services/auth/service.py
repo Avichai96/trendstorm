@@ -84,6 +84,7 @@ class AuthService:
                 tenant_id=api_key.tenant_id,
                 key_id=api_key.id,
                 source="api_key",
+                roles=list(api_key.roles),
             )
 
     async def authenticate_by_jwt(self, token: str) -> AuthContext:
@@ -93,21 +94,31 @@ class AuthService:
         with tracer.start_as_current_span("auth.authenticate_by_jwt"):
             payload = await self._jwt.validate(token)
             tenant_id = self._jwt.extract_tenant_id(payload)
+            # Roles from JWT "roles" claim (standard OIDC custom claim).
+            raw_roles = payload.get("roles", [])
+            roles = [raw_roles] if isinstance(raw_roles, str) else list(raw_roles)
             return AuthContext(
                 tenant_id=tenant_id,
                 subject=payload.get("sub"),
                 source="jwt",
+                roles=roles,
             )
 
     # ------------------------------------------------------------------ #
     # Key management                                                       #
     # ------------------------------------------------------------------ #
 
-    async def create_key(self, tenant_id: str, name: str) -> tuple[ApiKey, str]:
+    async def create_key(
+        self, tenant_id: str, name: str, *, roles: list[str] | None = None
+    ) -> tuple[ApiKey, str]:
         """Create a new API key. Returns (persisted ApiKey, plaintext_key).
 
         The plaintext key is returned ONCE and cannot be recovered later.
         Callers must show it to the user immediately.
+
+        roles: optional list of role strings (e.g. ["reviewer"]). Defaults to []
+        (standard access). Per-key granularity lets a tenant issue a reviewer key
+        and an app key with different permissions.
         """
         raw = generate_api_key(self._settings.key_env)
         api_key = ApiKey(
@@ -115,9 +126,10 @@ class AuthService:
             name=name,
             key_hash=hash_key(raw),
             key_prefix=key_prefix(raw),
+            roles=roles or [],
         )
         await self._keys.insert(api_key)
-        logger.info("auth.key_created", tenant_id=tenant_id, key_id=api_key.id)
+        logger.info("auth.key_created", tenant_id=tenant_id, key_id=api_key.id, roles=roles or [])
         return api_key, raw
 
     async def revoke_key(self, tenant_id: str, key_id: str) -> None:

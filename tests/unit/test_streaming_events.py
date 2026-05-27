@@ -23,10 +23,16 @@ class TestStreamEventType:
     def test_terminal_types(self) -> None:
         assert StreamEventType.REPORT_READY.is_terminal
         assert StreamEventType.JOB_FAILED.is_terminal
+        assert StreamEventType.JOB_REJECTED.is_terminal
 
     def test_non_terminal_types(self) -> None:
+        terminal = {
+            StreamEventType.REPORT_READY,
+            StreamEventType.JOB_FAILED,
+            StreamEventType.JOB_REJECTED,
+        }
         for t in StreamEventType:
-            if t not in {StreamEventType.REPORT_READY, StreamEventType.JOB_FAILED}:
+            if t not in terminal:
                 assert not t.is_terminal, f"{t} should not be terminal"
 
     def test_roundtrip_from_string(self) -> None:

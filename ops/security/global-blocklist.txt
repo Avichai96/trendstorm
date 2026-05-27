@@ -1,0 +1,45 @@
+# TrendStorm Global URL Blocklist
+# Format: one entry per line. Lines starting with # are comments.
+# Pattern types:
+#   domain:  exact hostname match (e.g. "evil.example.com")
+#   suffix:  hostname suffix block (prefix with ".")
+#   cidr:    IP CIDR notation
+#
+# Entries here are enforced for ALL tenants.
+# Per-tenant entries are managed via the url_blocklists collection.
+# Last updated: 2026-05-27
+
+# ---- AWS metadata services ----
+169.254.169.254
+fd00:ec2::254
+
+# ---- GCP metadata services ----
+metadata.google.internal
+169.254.169.254
+
+# ---- Azure IMDS ----
+169.254.169.254
+
+# ---- Kubernetes internal DNS ----
+.cluster.local
+.svc
+
+# ---- Known SSRF-common targets ----
+localhost
+127.0.0.1
+::1
+0.0.0.0
+
+# ---- Internal RFC-2606 reserved names ----
+.internal
+.local
+.test
+.example
+.invalid
+.localhost
+
+# ---- Common internal hostnames ----
+internal
+intranet
+corp
+local

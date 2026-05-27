@@ -63,8 +63,10 @@ class RenderEngine:
         import markdown as md_lib  # type: ignore[import-untyped]
         import weasyprint  # type: ignore[import-untyped]
 
+        from trendstorm.infrastructure.security.sanitize import sanitize_text
+
         html_body = md_lib.markdown(
-            markdown_text,
+            sanitize_text(markdown_text),
             extensions=["extra", "sane_lists"],
         )
         # Minimal HTML wrapper so weasyprint has a valid document.

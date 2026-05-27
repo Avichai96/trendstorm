@@ -168,6 +168,32 @@ class HostRateLimitedError(FetchError):
     default_message = "Per-host rate limit exceeded; back off and retry."
 
 
+class SSRFBlockedError(FetchError):
+    """URL rejected by the SSRF validator before any network connection was made.
+
+    `reason` is a machine-readable key used as a Prometheus label — must match
+    an entry in SecurityBlockReason enum in shared/metrics/registry.py.
+    """
+
+    default_code = "ssrf_blocked"
+    default_message = "URL blocked by SSRF validator."
+
+    def __init__(
+        self,
+        message: str | None = None,
+        *,
+        reason: str,
+        url: str,
+        context: dict | None = None,
+    ) -> None:
+        super().__init__(
+            message or self.default_message,
+            context={"reason": reason, "url": url, **(context or {})},
+        )
+        self.reason = reason
+        self.url = url
+
+
 class ParseError(ExternalServiceError):
     default_code = "parse_error"
     default_message = "Content could not be parsed."

@@ -67,6 +67,7 @@ from trendstorm.infrastructure.mongo.repositories import (
     IdempotencyRepository,
     MongoAnalysisRepository,
     MongoJobRepository,
+    MongoReviewRepository,
 )
 from trendstorm.orchestration.events import (
     AnalysisCompletedEvent,
@@ -76,8 +77,11 @@ from trendstorm.orchestration.events import (
     JobRequestedEvent,
     KnowledgeCompletedEvent,
     PublishCompletedEvent,
+    ReviewResolvedEvent,
 )
 from trendstorm.orchestration.topics import ConsumerGroup, Topic
+from trendstorm.domain.streaming.events import StreamEvent, StreamEventType
+from trendstorm.services.streaming.emit import emit_stream_event
 from trendstorm.shared.config import AnalysisSettings, KafkaSettings, get_settings
 from trendstorm.shared.errors import NotFoundError
 from trendstorm.shared.ids import new_id
@@ -107,10 +111,12 @@ _STAGE_TO_STATUS: dict[Stage, JobStatus] = {
     Stage.EMBEDDING: JobStatus.EMBEDDING,
     Stage.RETRIEVING: JobStatus.RETRIEVING,
     Stage.ANALYZING: JobStatus.ANALYZING,
+    Stage.AWAITING_REVIEW: JobStatus.AWAITING_REVIEW,
     Stage.PUBLISHING: JobStatus.PUBLISHING,
     Stage.COMPLETED: JobStatus.COMPLETED,
     Stage.FAILED: JobStatus.FAILED,
     Stage.CANCELLED: JobStatus.CANCELLED,
+    Stage.REJECTED: JobStatus.REJECTED,
 }
 
 
@@ -124,6 +130,7 @@ class OrchestratorWorker(BaseConsumer):
         graph: CompiledStateGraph[Any, Any, Any],
         job_repo: MongoJobRepository,
         analysis_repo: MongoAnalysisRepository,
+        review_repo: MongoReviewRepository,
         idempotency: IdempotencyRepository,
         producer: KafkaProducerClient,
         analysis_settings: AnalysisSettings,
@@ -135,6 +142,7 @@ class OrchestratorWorker(BaseConsumer):
                 Topic.KNOWLEDGE_COMPLETED,
                 Topic.ANALYSIS_COMPLETED,
                 Topic.PUBLISH_COMPLETED,
+                Topic.REVIEW_RESOLVED,
             ],
             group_id=ConsumerGroup.ORCHESTRATOR.value,
             settings=settings,
@@ -145,6 +153,7 @@ class OrchestratorWorker(BaseConsumer):
         self._graph = graph
         self._jobs = job_repo
         self._analyses = analysis_repo
+        self._reviews = review_repo
         self._analysis_settings = analysis_settings
 
     def _idempotency_key(self, event: EventEnvelope) -> str | None:
@@ -166,6 +175,8 @@ class OrchestratorWorker(BaseConsumer):
             await self._handle_analysis_completed(event)
         elif isinstance(event, PublishCompletedEvent):
             await self._handle_publish_completed(event)
+        elif isinstance(event, ReviewResolvedEvent):
+            await self._handle_review_resolved(event)
         else:
             logger.warning(
                 "orchestrator_unexpected_event",
@@ -570,10 +581,204 @@ class OrchestratorWorker(BaseConsumer):
                     else f"Graph terminated at stage {final_state.stage.value}"
                 ),
             )
+            # Notify SSE subscribers if the job is now waiting for human review.
+            if final_state.stage == Stage.AWAITING_REVIEW and final_state.pending_review_id:
+                await emit_stream_event(
+                    StreamEvent(
+                        job_id=event.job_id,
+                        tenant_id=event.tenant_id,
+                        event_type=StreamEventType.REVIEW_REQUIRED,
+                        payload={
+                            "review_id": final_state.pending_review_id,
+                            "analysis_id": final_state.analysis.insights_doc_id,
+                            "validator_score": final_state.analysis.validation_score,
+                        },
+                    ),
+                    producer=self._producer,
+                    correlation_id=final_state.observability.correlation_id,
+                )
             logger.info(
                 "graph_paused_awaiting_publisher",
                 job_id=event.job_id,
                 stage=final_state.stage.value,
+            )
+
+    async def _handle_review_resolved(self, event: ReviewResolvedEvent) -> None:
+        """Resume or terminate the job after a human review decision.
+
+        Decision semantics:
+            approve          → advance stage to PUBLISHING, set skip_hitl_gate=True,
+                               resume graph from NODE_REVIEW_GATE → publish.
+            reject           → update job status to REJECTED; no graph resume.
+            request_refinement → publish a new AnalysisPendingEvent with the
+                               reviewer's comment as refinement_notes; no astream.
+        """
+        from trendstorm.agents.orchestrator.edges import NODE_REVIEW_GATE
+        from trendstorm.domain.reviews.models import ReviewDecision
+
+        config: RunnableConfig = {"configurable": {"thread_id": event.job_id}}
+
+        snapshot = await self._graph.aget_state(config)
+        if not snapshot.values:
+            logger.warning("no_checkpoint_for_job", job_id=event.job_id)
+            return
+        current = JobState.model_validate(snapshot.values)
+        if current.stage.is_terminal:
+            logger.info("job_already_terminal", job_id=event.job_id, stage=current.stage.value)
+            return
+
+        try:
+            decision = ReviewDecision(event.decision)
+        except ValueError:
+            logger.error("review_resolved.unknown_decision",
+                         job_id=event.job_id, decision=event.decision)
+            return
+
+        # Mark review resolved in Mongo.
+        await self._reviews.resolve(
+            event.tenant_id,
+            event.review_id,
+            decision=decision,
+            comment=event.comment,
+            reviewer_id=event.resolved_by,
+        )
+
+        if decision == ReviewDecision.REJECT:
+            await self._jobs.update_status(
+                event.tenant_id, event.job_id, JobStatus.REJECTED,
+                failure_code="review_rejected",
+                failure_message=event.comment or "Analysis rejected by reviewer.",
+            )
+            await emit_stream_event(
+                StreamEvent(
+                    job_id=event.job_id,
+                    tenant_id=event.tenant_id,
+                    event_type=StreamEventType.JOB_REJECTED,
+                    payload={"review_id": event.review_id, "comment": event.comment},
+                ),
+                producer=self._producer,
+                correlation_id=current.observability.correlation_id,
+            )
+            logger.info("review_resolved.rejected", job_id=event.job_id,
+                        review_id=event.review_id, resolved_by=event.resolved_by)
+            return
+
+        if decision == ReviewDecision.APPROVE:
+            # Advance stage; skip_hitl_gate prevents re-gating on graph resume.
+            await self._graph.aupdate_state(
+                config,
+                {"stage": Stage.PUBLISHING, "pending_review_id": None, "skip_hitl_gate": True},
+                as_node=NODE_REVIEW_GATE,
+            )
+            await emit_stream_event(
+                StreamEvent(
+                    job_id=event.job_id,
+                    tenant_id=event.tenant_id,
+                    event_type=StreamEventType.REVIEW_RESOLVED,
+                    payload={"review_id": event.review_id, "decision": "approve"},
+                ),
+                producer=self._producer,
+                correlation_id=current.observability.correlation_id,
+            )
+            await self._resume_to_publish_after_review(event, config)
+            logger.info("review_resolved.approved", job_id=event.job_id,
+                        review_id=event.review_id, resolved_by=event.resolved_by)
+            return
+
+        # decision == ReviewDecision.REQUEST_REFINEMENT
+        new_loop = current.refinement_loops + 1
+        refinement_notes = event.comment or (
+            "Prior analysis was flagged for refinement by a human reviewer. "
+            "Improve grounding, specificity, and faithfulness."
+        )
+        await self._graph.aupdate_state(
+            config,
+            {
+                "stage": Stage.ANALYZING,
+                "pending_review_id": None,
+                "skip_hitl_gate": True,
+                "review_decision_comment": event.comment,
+                "refinement_loops": new_loop,
+            },
+            as_node=NODE_REVIEW_GATE,
+        )
+        await self._publish_refinement_request_from_review(
+            event=event,
+            current=current,
+            new_loop=new_loop,
+            refinement_notes=refinement_notes,
+        )
+        await self._jobs.update_status(
+            event.tenant_id, event.job_id, JobStatus.ANALYZING,
+            failure_code=None, failure_message=None,
+        )
+        logger.info("review_resolved.refinement_requested", job_id=event.job_id,
+                    review_id=event.review_id, new_loop=new_loop)
+
+    async def _publish_refinement_request_from_review(
+        self,
+        *,
+        event: ReviewResolvedEvent,
+        current: JobState,
+        new_loop: int,
+        refinement_notes: str,
+    ) -> None:
+        """Publish AnalysisPendingEvent for a reviewer-requested refinement."""
+        otel_carrier: dict[str, str] = {}
+        inject(otel_carrier)
+        pending = AnalysisPendingEvent(
+            correlation_id=current.observability.correlation_id,
+            tenant_id=event.tenant_id,
+            traceparent=otel_carrier.get("traceparent"),
+            job_id=event.job_id,
+            category_id=current.category_id,
+            refinement_loop=new_loop,
+            refinement_notes=refinement_notes,
+        )
+        await self._producer.producer.send_and_wait(
+            Topic.ANALYSIS_PENDING.value,
+            value=pending.model_dump_json().encode(),
+            key=event.job_id.encode(),
+        )
+
+    async def _resume_to_publish_after_review(
+        self,
+        event: ReviewResolvedEvent,
+        config: RunnableConfig,
+    ) -> None:
+        """Resume graph from NODE_REVIEW_GATE → NODE_PUBLISH after review approval."""
+        pub_config: RunnableConfig = {
+            "configurable": {
+                **config.get("configurable", {}),
+                "kafka_producer": self._producer.producer,
+            }
+        }
+        final_state: JobState | None = None
+        try:
+            async for step in self._graph.astream(
+                None, config=pub_config, interrupt_after=[NODE_PUBLISH],
+            ):
+                for node_name, _update in step.items():
+                    if node_name == "__interrupt__":
+                        continue
+                    logger.info("graph_step", job_id=event.job_id, node=node_name)
+
+            snapshot = await self._graph.aget_state(pub_config)
+            final_state = JobState.model_validate(snapshot.values)
+        except Exception:
+            logger.exception("graph_resume_failed_after_review_approval", job_id=event.job_id)
+            await self._jobs.update_status(
+                event.tenant_id, event.job_id, JobStatus.FAILED,
+                failure_code="graph_resume_error",
+                failure_message="Graph resume failed after review approval",
+            )
+            raise
+
+        if final_state:
+            new_status = _STAGE_TO_STATUS.get(final_state.stage, JobStatus.FAILED)
+            await self._jobs.update_status(
+                event.tenant_id, event.job_id, new_status,
+                failure_code=None, failure_message=None,
             )
 
     async def _handle_publish_completed(self, event: PublishCompletedEvent) -> None:

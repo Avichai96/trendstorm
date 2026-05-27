@@ -49,7 +49,7 @@ from trendstorm.orchestration.events import (
     KnowledgePendingEvent,
     PublishPendingEvent,
 )
-from trendstorm.orchestration.topics import Topic
+from trendstorm.orchestration.topics import Topic  # REVIEW_REQUESTED used inside review_gate_node
 from trendstorm.shared.errors import ExternalServiceError
 from trendstorm.shared.ids import new_id
 from trendstorm.shared.logging import get_logger
@@ -507,6 +507,133 @@ async def publish_node(state: JobState, config: RunnableConfig) -> dict[str, Any
                 report_blob_uri=f"s3://trendstorm-reports/{state.job_id}/report.md",
             ),
             "stage": Stage.COMPLETED,
+        }
+
+
+# ===========================================================================
+# Node: review_gate  — HITL pass-through or pause for human review (Phase 13.5)
+# ===========================================================================
+
+async def review_gate_node(state: JobState, config: RunnableConfig) -> dict[str, Any]:
+    """Gate analysis to human review or pass it directly to publishing.
+
+    Decision logic:
+        1. skip_hitl_gate=True  → always pass-through (post-review-resolution path).
+        2. kafka_producer absent → stub path (unit tests), always pass-through.
+        3. HITL mode "off"      → pass-through.
+        4. HITL mode "always"   → gate.
+        5. HITL mode "flagged_only" → gate if:
+               - validator_score < hitl_validator_threshold, OR
+               - refinement_loops >= max_refinement_loops (budget exhausted), OR
+               - cost_so_far_usd > hitl_cost_threshold_usd (if configured).
+
+    Pass-through: returns {stage: PUBLISHING}.
+    Gate: creates a ReviewRequest in Mongo, publishes ReviewRequestedEvent,
+    returns {stage: AWAITING_REVIEW, pending_review_id: review_id}.
+    The orchestrator resumes via _handle_review_resolved when the reviewer
+    decides (or the timeout sweeper fires).
+    """
+    with tracer.start_as_current_span("orchestrator.review_gate"):
+        # --- 1. skip_hitl_gate: cleared after a review resolves to avoid re-gating.
+        if state.skip_hitl_gate:
+            logger.info("review_gate.skip_hitl", job_id=state.job_id)
+            return {"stage": Stage.PUBLISHING, "skip_hitl_gate": False}
+
+        kafka_producer = config.get("configurable", {}).get("kafka_producer")
+
+        # --- 2. Stub path (no Kafka / unit tests)
+        if kafka_producer is None:
+            return {"stage": Stage.PUBLISHING}
+
+        # --- 3. Load tenant settings (deferred imports keep module-level clean).
+        from trendstorm.domain.tenant_settings.models import (
+            DEFAULT_TENANT_SETTINGS,
+            HitlMode,
+        )
+
+        settings_repo = config.get("configurable", {}).get("tenant_settings_repo")
+        if settings_repo is not None:
+            ts = await settings_repo.get_for_tenant(state.tenant_id)
+            tenant_settings = ts if ts is not None else DEFAULT_TENANT_SETTINGS
+        else:
+            tenant_settings = DEFAULT_TENANT_SETTINGS
+
+        if tenant_settings.hitl_mode == HitlMode.OFF:
+            return {"stage": Stage.PUBLISHING}
+
+        # --- 4/5. Determine whether to flag.
+        score = state.analysis.validation_score
+        loops = state.refinement_loops
+        from trendstorm.agents.state import MAX_REFINEMENT_LOOPS
+        budget_exhausted = loops >= MAX_REFINEMENT_LOOPS
+
+        should_gate = (
+            tenant_settings.hitl_mode == HitlMode.ALWAYS
+            or score < tenant_settings.hitl_validator_threshold
+            or budget_exhausted
+        )
+
+        if not should_gate:
+            return {"stage": Stage.PUBLISHING}
+
+        # --- Gate: create review record and publish event.
+        from datetime import UTC, datetime, timedelta
+
+        from trendstorm.domain.reviews.models import ReviewRequest
+        from trendstorm.orchestration.events import ReviewRequestedEvent
+
+        timeout_hours = tenant_settings.hitl_timeout_hours
+        timeout_at = datetime.now(UTC) + timedelta(hours=timeout_hours)
+
+        review = ReviewRequest(
+            tenant_id=state.tenant_id,
+            job_id=state.job_id,
+            analysis_id=state.analysis.insights_doc_id or "",
+            stage_under_review=state.stage.value,
+            timeout_at=timeout_at,
+            sla_seconds=timeout_hours * 3600,
+        )
+
+        review_repo = config.get("configurable", {}).get("review_repo")
+        if review_repo is not None:
+            await review_repo.insert(review)
+            logger.info(
+                "review_gate.created",
+                job_id=state.job_id,
+                review_id=review.id,
+                score=score,
+                mode=tenant_settings.hitl_mode.value,
+            )
+
+        from opentelemetry.propagate import inject
+        otel_carrier: dict[str, str] = {}
+        inject(otel_carrier)
+
+        event = ReviewRequestedEvent(
+            correlation_id=state.observability.correlation_id,
+            tenant_id=state.tenant_id,
+            traceparent=otel_carrier.get("traceparent"),
+            job_id=state.job_id,
+            review_id=review.id,
+            analysis_id=review.analysis_id,
+            validator_score=score,
+            refinement_loops=loops,
+            timeout_at=timeout_at,
+        )
+        await kafka_producer.send_and_wait(
+            Topic.REVIEW_REQUESTED.value,
+            value=event.model_dump_json().encode(),
+            key=state.job_id.encode(),
+        )
+        logger.info(
+            "review_gate.published",
+            job_id=state.job_id,
+            review_id=review.id,
+            timeout_at=timeout_at.isoformat(),
+        )
+        return {
+            "stage": Stage.AWAITING_REVIEW,
+            "pending_review_id": review.id,
         }
 
 

@@ -38,6 +38,11 @@ class StreamEventType(StrEnum):
     # Terminal events — SSE endpoint closes stream on these
     REPORT_READY = "report_ready"       # Publisher finished, Report persisted
     JOB_FAILED = "job_failed"           # unrecoverable failure
+    JOB_REJECTED = "job_rejected"       # HITL reviewer declined the analysis
+
+    # HITL review events (Phase 13.5)
+    REVIEW_REQUIRED = "review_required"  # analysis paused, awaiting human decision
+    REVIEW_RESOLVED = "review_resolved"  # reviewer (or sweeper) made a decision
 
     # Infrastructure
     HEARTBEAT = "heartbeat"             # SSE comment — client never sees this as data
@@ -45,7 +50,11 @@ class StreamEventType(StrEnum):
     @property
     def is_terminal(self) -> bool:
         """True for event types that signal end-of-stream."""
-        return self in {StreamEventType.REPORT_READY, StreamEventType.JOB_FAILED}
+        return self in {
+            StreamEventType.REPORT_READY,
+            StreamEventType.JOB_FAILED,
+            StreamEventType.JOB_REJECTED,
+        }
 
 
 class StreamEvent(BaseModel):

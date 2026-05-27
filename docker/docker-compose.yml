@@ -220,6 +220,9 @@ services:
         create_topic trendstorm.retry.analysis.1h.v1      6  86400000
         # DLQ
         create_topic trendstorm.dlq.v1                    6 2592000000  # 30d
+        # HITL review (Phase 13.5) — partitioned by job_id
+        create_topic trendstorm.review.requested.v1       6 604800000   # 7d
+        create_topic trendstorm.review.resolved.v1        6 604800000   # 7d
         echo "All Kafka topics created."
     restart: "no"
 

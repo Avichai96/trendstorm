@@ -406,6 +406,96 @@ INDEXES: list[IndexSpec] = [
         name="outbox__ttl_published",
         expire_after_seconds=7 * _SECONDS_PER_DAY,
     ),
+
+    # =======================================================================
+    # audit_log — append-only security event records (Phase 13)
+    # =======================================================================
+    # Primary query: "recent security events for a tenant."
+    IndexSpec(
+        collection=Collection.AUDIT_LOG,
+        keys=[("tenant_id", ASCENDING), ("created_at", DESCENDING)],
+        name="audit_log__tenant_created",
+    ),
+    # Filtered query: "events of a specific type for a tenant."
+    IndexSpec(
+        collection=Collection.AUDIT_LOG,
+        keys=[("tenant_id", ASCENDING), ("event_type", ASCENDING), ("created_at", DESCENDING)],
+        name="audit_log__tenant_event_type_created",
+    ),
+    # TTL: retain audit log for 365 days (regulatory retention minimum).
+    IndexSpec(
+        collection=Collection.AUDIT_LOG,
+        keys=[("created_at", ASCENDING)],
+        name="audit_log__ttl_created",
+        expire_after_seconds=_TTL_365_DAYS,
+    ),
+
+    # =======================================================================
+    # url_blocklists — per-tenant SSRF blocking rules (Phase 13)
+    # =======================================================================
+    # Primary query: "all blocklist rules for a tenant."
+    IndexSpec(
+        collection=Collection.URL_BLOCKLISTS,
+        keys=[("tenant_id", ASCENDING), ("created_at", DESCENDING)],
+        name="url_blocklists__tenant_created",
+    ),
+    # Dedup: prevent duplicate patterns per tenant.
+    IndexSpec(
+        collection=Collection.URL_BLOCKLISTS,
+        keys=[("tenant_id", ASCENDING), ("pattern", ASCENDING)],
+        name="url_blocklists__tenant_pattern_unique",
+        unique=True,
+    ),
+
+    # =======================================================================
+    # reviews — HITL review queue (Phase 13.5)
+    # =======================================================================
+    # Timeout sweeper: "find pending reviews whose deadline has passed."
+    IndexSpec(
+        collection=Collection.REVIEWS,
+        keys=[("tenant_id", ASCENDING), ("status", ASCENDING), ("timeout_at", ASCENDING)],
+        name="reviews__tenant_status_timeout",
+    ),
+    # Cross-tenant sweeper query (no tenant_id): "expired pending reviews globally."
+    IndexSpec(
+        collection=Collection.REVIEWS,
+        keys=[("status", ASCENDING), ("timeout_at", ASCENDING)],
+        name="reviews__status_timeout_sweeper",
+        partial_filter_expression={"status": "pending"},
+    ),
+    # API list query: "this tenant's reviews, newest first, optionally by status."
+    IndexSpec(
+        collection=Collection.REVIEWS,
+        keys=[("tenant_id", ASCENDING), ("created_at", DESCENDING)],
+        name="reviews__tenant_created",
+    ),
+    # Uniqueness: only one PENDING review per job per tenant.
+    # Partial index covers only pending rows — resolved reviews don't enforce this.
+    IndexSpec(
+        collection=Collection.REVIEWS,
+        keys=[("tenant_id", ASCENDING), ("job_id", ASCENDING)],
+        name="reviews__tenant_job_pending_unique",
+        unique=True,
+        partial_filter_expression={"status": "pending"},
+    ),
+    # TTL: retain resolved reviews for 365 days (audit/compliance).
+    IndexSpec(
+        collection=Collection.REVIEWS,
+        keys=[("created_at", ASCENDING)],
+        name="reviews__ttl_created",
+        expire_after_seconds=_TTL_365_DAYS,
+    ),
+
+    # =======================================================================
+    # tenant_settings — per-tenant operational config (Phase 13.5)
+    # =======================================================================
+    # One settings document per tenant; tenant_id is the natural unique key.
+    IndexSpec(
+        collection=Collection.TENANT_SETTINGS,
+        keys=[("tenant_id", ASCENDING)],
+        name="tenant_settings__tenant_unique",
+        unique=True,
+    ),
 ]
 
 

@@ -26,20 +26,36 @@ from trendstorm.infrastructure.mongo.repositories.report_repository import (
 from trendstorm.infrastructure.mongo.repositories.source_repository import (
     MongoSourceRepository,
 )
+from trendstorm.infrastructure.mongo.repositories.audit_log_repository import (
+    MongoAuditLogRepository,
+)
 from trendstorm.infrastructure.mongo.repositories.tenant_repository import (
     MongoTenantRepository,
+)
+from trendstorm.infrastructure.mongo.repositories.review_repository import (
+    MongoReviewRepository,
+)
+from trendstorm.infrastructure.mongo.repositories.tenant_settings_repository import (
+    MongoTenantSettingsRepository,
+)
+from trendstorm.infrastructure.mongo.repositories.url_blocklist_repository import (
+    MongoUrlBlocklistRepository,
 )
 
 __all__ = [
     "IdempotencyRepository",
     "IdempotencyResult",
     "MongoAnalysisRepository",
+    "MongoAuditLogRepository",
     "MongoApiKeyRepository",
     "MongoCategoryRepository",
     "MongoChunkRepository",
     "MongoJobRepository",
     "MongoRawDocumentRepository",
     "MongoReportRepository",
+    "MongoReviewRepository",
     "MongoSourceRepository",
     "MongoTenantRepository",
+    "MongoTenantSettingsRepository",
+    "MongoUrlBlocklistRepository",
 ]

@@ -12,9 +12,10 @@ class JobStatus(StrEnum):
 
     Transition graph (see Phase 4 LangGraph design):
         PENDING -> INGESTING -> EMBEDDING -> RETRIEVING ->
-        ANALYZING -> PUBLISHING -> COMPLETED
+        ANALYZING -> [AWAITING_REVIEW ->] PUBLISHING -> COMPLETED
         Any state -> FAILED (terminal)
         Any state -> CANCELLED (terminal)
+        AWAITING_REVIEW -> REJECTED (terminal, human reviewer declined)
     """
 
     PENDING = "pending"
@@ -22,14 +23,16 @@ class JobStatus(StrEnum):
     EMBEDDING = "embedding"
     RETRIEVING = "retrieving"
     ANALYZING = "analyzing"
+    AWAITING_REVIEW = "awaiting_review"   # HITL: paused for human decision
     PUBLISHING = "publishing"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    REJECTED = "rejected"                 # HITL: human reviewer declined the analysis
 
     @property
     def is_terminal(self) -> bool:
-        return self in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
+        return self in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.REJECTED}
 
 
 class SourceType(StrEnum):

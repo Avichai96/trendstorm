@@ -114,3 +114,14 @@ class Attr:
     ERROR_CLASS = "trendstorm.error_class"
     IS_PERMANENT = "trendstorm.is_permanent"
     ATTEMPT = "trendstorm.attempt"
+
+    # ------------------------------------------------------------------ #
+    # Security (Phase 13)
+    # ------------------------------------------------------------------ #
+    SECURITY_BLOCK_REASON = "trendstorm.security.block_reason"
+    SECURITY_BLOCKED_URL = "trendstorm.security.blocked_url"
+    SECURITY_BLOCKED_HOST = "trendstorm.security.blocked_host"
+    SECURITY_PII_TYPE = "trendstorm.security.pii_type"
+    SECURITY_PII_COUNT = "trendstorm.security.pii_count"
+    SECURITY_AUDIT_EVENT_TYPE = "trendstorm.security.audit_event_type"
+    SECURITY_REDIRECT_HOP = "trendstorm.security.redirect_hop"

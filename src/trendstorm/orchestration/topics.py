@@ -62,6 +62,10 @@ class Topic(StrEnum):
     # --- Dead letter ---
     DLQ                   = "trendstorm.dlq.v1"
 
+    # --- HITL review (Phase 13.5) ---
+    REVIEW_REQUESTED      = "trendstorm.review.requested.v1"
+    REVIEW_RESOLVED       = "trendstorm.review.resolved.v1"
+
 
 class ConsumerGroup(StrEnum):
     """Canonical consumer group names.
@@ -80,3 +84,4 @@ class ConsumerGroup(StrEnum):
     SSE_COORDINATOR     = "trendstorm.sse-coordinator"
     PRODUCTION_EVAL     = "trendstorm.production-eval"
     DLQ_MONITOR         = "trendstorm.dlq-monitor"
+    REVIEW_TIMEOUT      = "trendstorm.review-timeout"

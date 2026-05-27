@@ -17,7 +17,7 @@ class TestStageTransitions:
     """
 
     def test_terminal_stages_have_no_successors(self) -> None:
-        for terminal in (Stage.COMPLETED, Stage.FAILED, Stage.CANCELLED):
+        for terminal in (Stage.COMPLETED, Stage.FAILED, Stage.CANCELLED, Stage.REJECTED):
             assert allowed_next_stages(terminal) == frozenset()
             assert terminal.is_terminal is True
 
@@ -28,13 +28,19 @@ class TestStageTransitions:
         assert not is_valid_transition(Stage.PENDING, Stage.PUBLISHING)
 
     def test_any_stage_can_fail(self) -> None:
+        # AWAITING_REVIEW does not go to FAILED; it goes to REJECTED (distinct terminal state).
         for s in (Stage.PENDING, Stage.INGESTING, Stage.EMBEDDING,
                   Stage.RETRIEVING, Stage.ANALYZING, Stage.PUBLISHING):
             assert is_valid_transition(s, Stage.FAILED), f"{s} -> FAILED disallowed"
 
+    def test_awaiting_review_cannot_fail_only_reject(self) -> None:
+        """AWAITING_REVIEW skips FAILED — reviewer decisions produce REJECTED, not FAILED."""
+        assert not is_valid_transition(Stage.AWAITING_REVIEW, Stage.FAILED)
+        assert is_valid_transition(Stage.AWAITING_REVIEW, Stage.REJECTED)
+
     def test_any_stage_can_be_cancelled(self) -> None:
         for s in (Stage.PENDING, Stage.INGESTING, Stage.EMBEDDING,
-                  Stage.RETRIEVING, Stage.ANALYZING, Stage.PUBLISHING):
+                  Stage.RETRIEVING, Stage.ANALYZING, Stage.AWAITING_REVIEW, Stage.PUBLISHING):
             assert is_valid_transition(s, Stage.CANCELLED), f"{s} -> CANCELLED disallowed"
 
     def test_self_retry_allowed_for_work_stages(self) -> None:
@@ -71,3 +77,22 @@ class TestStageTransitions:
         ]
         for a, b in itertools.pairwise(chain):
             assert is_valid_transition(a, b), f"Happy-path step {a} -> {b} disallowed"
+
+    def test_hitl_transitions(self) -> None:
+        """ANALYZING → AWAITING_REVIEW → PUBLISHING/ANALYZING/REJECTED are valid."""
+        assert is_valid_transition(Stage.ANALYZING, Stage.AWAITING_REVIEW)
+        assert is_valid_transition(Stage.AWAITING_REVIEW, Stage.PUBLISHING)    # approve
+        assert is_valid_transition(Stage.AWAITING_REVIEW, Stage.ANALYZING)     # request_refinement
+        assert is_valid_transition(Stage.AWAITING_REVIEW, Stage.REJECTED)      # reject
+
+    def test_rejected_is_terminal(self) -> None:
+        assert Stage.REJECTED.is_terminal is True
+        assert allowed_next_stages(Stage.REJECTED) == frozenset()
+
+    def test_rejected_not_reachable_from_non_review_stages(self) -> None:
+        """REJECTED is only reachable from AWAITING_REVIEW, not from other stages."""
+        for s in (Stage.PENDING, Stage.INGESTING, Stage.EMBEDDING,
+                  Stage.RETRIEVING, Stage.ANALYZING, Stage.PUBLISHING):
+            assert not is_valid_transition(s, Stage.REJECTED), (
+                f"{s} -> REJECTED should not be allowed (only from AWAITING_REVIEW)"
+            )

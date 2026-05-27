@@ -111,6 +111,40 @@ class ContentTypeLabel(StrEnum):
     OTHER = "other"
 
 
+class SecurityBlockReason(StrEnum):
+    """Bounded set of SSRF/security block reasons used as Prometheus label values.
+
+    Each value corresponds to a rejection class in infrastructure/security/*.
+    Keeping these as a StrEnum gives IDE completion and prevents typos at
+    call sites. New rejection classes MUST be added here first.
+    """
+    # SSRF — IPv4
+    SSRF_PRIVATE_IP = "ssrf_private_ip"         # RFC 1918 + CG-NAT
+    SSRF_LOOPBACK = "ssrf_loopback"             # 127.0.0.0/8
+    SSRF_LINK_LOCAL = "ssrf_link_local"         # 169.254.0.0/16 (AWS IMDS)
+    SSRF_IPV4_MAPPED = "ssrf_ipv4_mapped"       # ::ffff:0:0/96
+    # SSRF — IPv6
+    SSRF_IPV6_LOOPBACK = "ssrf_ipv6_loopback"   # ::1
+    SSRF_IPV6_ULA = "ssrf_ipv6_ula"             # fc00::/7
+    SSRF_IPV6_LINK_LOCAL = "ssrf_ipv6_link_local"  # fe80::/10
+    # SSRF — other
+    SSRF_INTERNAL_HOSTNAME = "ssrf_internal_hostname"  # .internal / .local etc.
+    SSRF_SCHEME_DOWNGRADE = "ssrf_scheme_downgrade"    # https -> http redirect
+    SSRF_SCHEME_NOT_ALLOWED = "ssrf_scheme_not_allowed"  # file://, ftp:// etc.
+    SSRF_MAX_REDIRECTS = "ssrf_max_redirects"   # exceeded hop limit
+    SSRF_DNS_FAILURE = "ssrf_dns_failure"       # hostname did not resolve
+    SSRF_NO_HOSTNAME = "ssrf_no_hostname"       # URL has no hostname
+    # Blocklists
+    SSRF_BLOCKLIST_GLOBAL = "ssrf_blocklist_global"    # global ops/security file
+    SSRF_BLOCKLIST_TENANT = "ssrf_blocklist_tenant"    # per-tenant Mongo entry
+    # PII
+    PII_SSN = "pii_ssn"
+    PII_CC = "pii_cc"
+    PII_EMAIL = "pii_email"
+    PII_PHONE = "pii_phone"
+    PII_IBAN = "pii_iban"
+
+
 # ---------------------------------------------------------------------------
 # Histogram bucket presets
 # ---------------------------------------------------------------------------
@@ -674,6 +708,99 @@ class _TrendStormMetrics:
         )
 
         # ------------------------------------------------------------------ #
+        # Security metrics (Phase 13)
+        # ------------------------------------------------------------------ #
+        # tenant_id_hash is a bucketed hash (not raw tenant_id) so cardinality
+        # is bounded at 100 buckets regardless of tenant count.
+        # reason is drawn from SecurityBlockReason (closed enum).
+        _check_labels("security_block_total", ("reason", "tenant_id_hash"))
+        self.security_blocks = (
+            Counter(
+                "trendstorm_security_block_total",
+                "Total security blocks by reason and hashed tenant bucket.",
+                labelnames=["reason", "tenant_id_hash"],
+                registry=registry,
+            )
+            if registry is not None
+            else Counter(
+                "trendstorm_security_block_total",
+                "Total security blocks by reason and hashed tenant bucket.",
+                labelnames=["reason", "tenant_id_hash"],
+            )
+        )
+
+        # ------------------------------------------------------------------ #
+        # HITL review metrics (Phase 13.5)
+        # ------------------------------------------------------------------ #
+        # Gauge: how many reviews are currently pending (per tenant hash bucket).
+        _check_labels("reviews_pending", ("tenant_id_hash",))
+        self.reviews_pending = (
+            Gauge(
+                "trendstorm_reviews_pending",
+                "Number of pending HITL reviews awaiting a decision.",
+                labelnames=["tenant_id_hash"],
+                registry=registry,
+            )
+            if registry is not None
+            else Gauge(
+                "trendstorm_reviews_pending",
+                "Number of pending HITL reviews awaiting a decision.",
+                labelnames=["tenant_id_hash"],
+            )
+        )
+        # Histogram: wall-clock seconds from review created_at to resolved_at.
+        _check_labels("review_resolution_seconds", ("decision",))
+        self.review_resolution_seconds = (
+            Histogram(
+                "trendstorm_review_resolution_seconds",
+                "Time in seconds from review creation to resolution.",
+                labelnames=["decision"],
+                buckets=[60, 300, 900, 1800, 3600, 7200, 14400, 43200, 86400, 172800],
+                registry=registry,
+            )
+            if registry is not None
+            else Histogram(
+                "trendstorm_review_resolution_seconds",
+                "Time in seconds from review creation to resolution.",
+                labelnames=["decision"],
+                buckets=[60, 300, 900, 1800, 3600, 7200, 14400, 43200, 86400, 172800],
+            )
+        )
+        # Counter: total reviews auto-expired by the timeout sweeper.
+        self.review_timeout_total = (
+            Counter(
+                "trendstorm_review_timeout_total",
+                "Total HITL reviews that expired without a reviewer decision.",
+                registry=registry,
+            )
+            if registry is not None
+            else Counter(
+                "trendstorm_review_timeout_total",
+                "Total HITL reviews that expired without a reviewer decision.",
+            )
+        )
+        # Gauge: Unix timestamp of the oldest pending review per tenant hash bucket.
+        # Used by the PendingReviewsAgingHigh alert: (time() - gauge) / 3600 > threshold.
+        # Workers call .labels(tenant_id_hash=...).set(review.created_at.timestamp()).
+        # When all pending reviews resolve, workers should .set(0) or the alert
+        # expression naturally drops below the threshold.
+        _check_labels("reviews_pending_oldest_created_at", ("tenant_id_hash",))
+        self.reviews_pending_oldest_created_at = (
+            Gauge(
+                "trendstorm_reviews_pending_oldest_created_at",
+                "Unix timestamp of the oldest pending HITL review per tenant bucket.",
+                labelnames=["tenant_id_hash"],
+                registry=registry,
+            )
+            if registry is not None
+            else Gauge(
+                "trendstorm_reviews_pending_oldest_created_at",
+                "Unix timestamp of the oldest pending HITL review per tenant bucket.",
+                labelnames=["tenant_id_hash"],
+            )
+        )
+
+        # ------------------------------------------------------------------ #
         # Active SSE connections (saturation gauge)
         # ------------------------------------------------------------------ #
         _check_labels("sse_active_connections", ("service",))
@@ -698,6 +825,39 @@ class _TrendStormMetrics:
 # ---------------------------------------------------------------------------
 
 METRICS = _TrendStormMetrics()
+
+
+def tenant_id_hash(tenant_id: str) -> str:
+    """Map a tenant_id to a bounded Prometheus label value.
+
+    Returns a string like "b42" (100 buckets). Raw tenant_id must never
+    appear as a Prometheus label (unbounded cardinality); this hash gives
+    an aggregatable proxy while keeping cardinality at exactly 100.
+    """
+    return f"b{hash(tenant_id) % 100:02d}"
+
+
+def record_security_block(
+    reason: str,
+    tenant_id: str,
+    *,
+    metrics: _TrendStormMetrics | None = None,
+) -> None:
+    """Increment trendstorm_security_block_total for one security rejection.
+
+    Args:
+        reason: A SecurityBlockReason value (or SSRFBlockedError.reason).
+        tenant_id: The tenant scope — hashed before use as a label.
+        metrics: Override for tests; defaults to the module-level METRICS singleton.
+    """
+    m = metrics if metrics is not None else METRICS
+    try:
+        m.security_blocks.labels(
+            reason=reason,
+            tenant_id_hash=tenant_id_hash(tenant_id),
+        ).inc()
+    except Exception:
+        pass  # metric failure must never crash business logic
 
 
 def make_test_metrics() -> _TrendStormMetrics:

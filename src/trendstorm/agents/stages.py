@@ -11,13 +11,15 @@ Why a Stage enum separate from JobStatus?
     - This separation lets us refactor internals without breaking the API.
 
 Transition rules
-    PENDING     -> INGESTING
-    INGESTING   -> EMBEDDING | FAILED
-    EMBEDDING   -> RETRIEVING | FAILED
-    RETRIEVING  -> ANALYZING | FAILED
-    ANALYZING   -> PUBLISHING | RETRIEVING (refinement loop) | FAILED
-    PUBLISHING  -> COMPLETED | FAILED
-    Any         -> CANCELLED (user-initiated)
+    PENDING         -> INGESTING
+    INGESTING       -> EMBEDDING | FAILED
+    EMBEDDING       -> RETRIEVING | FAILED
+    RETRIEVING      -> ANALYZING | FAILED
+    ANALYZING       -> AWAITING_REVIEW | PUBLISHING | RETRIEVING (refinement) | FAILED
+    AWAITING_REVIEW -> ANALYZING (refinement requested) | PUBLISHING (approved) | REJECTED (rejected/timeout)
+    PUBLISHING      -> COMPLETED | FAILED
+    REJECTED        is terminal (human reviewer rejected the analysis)
+    Any             -> CANCELLED (user-initiated)
 
 These are enforced in `is_valid_transition` so bugs in node code surface fast.
 """
@@ -34,14 +36,16 @@ class Stage(StrEnum):
     EMBEDDING = "embedding"
     RETRIEVING = "retrieving"
     ANALYZING = "analyzing"
+    AWAITING_REVIEW = "awaiting_review"   # HITL: paused for human decision
     PUBLISHING = "publishing"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    REJECTED = "rejected"                 # HITL: human reviewer rejected the analysis
 
     @property
     def is_terminal(self) -> bool:
-        return self in {Stage.COMPLETED, Stage.FAILED, Stage.CANCELLED}
+        return self in {Stage.COMPLETED, Stage.FAILED, Stage.CANCELLED, Stage.REJECTED}
 
 
 # Allowed forward transitions. Map of stage -> set of next stages.
@@ -51,14 +55,21 @@ _TRANSITIONS: dict[Stage, frozenset[Stage]] = {
     Stage.INGESTING:  frozenset({Stage.INGESTING, Stage.EMBEDDING, Stage.FAILED, Stage.CANCELLED}),
     Stage.EMBEDDING:  frozenset({Stage.EMBEDDING, Stage.RETRIEVING, Stage.FAILED, Stage.CANCELLED}),
     Stage.RETRIEVING: frozenset({Stage.RETRIEVING, Stage.ANALYZING, Stage.FAILED, Stage.CANCELLED}),
-    # Note: ANALYZING can loop back to RETRIEVING for self-correction
+    # ANALYZING can loop back to RETRIEVING for auto-refinement, or pause for HITL review.
     Stage.ANALYZING:  frozenset({
-        Stage.ANALYZING, Stage.PUBLISHING, Stage.RETRIEVING, Stage.FAILED, Stage.CANCELLED,
+        Stage.ANALYZING, Stage.AWAITING_REVIEW, Stage.PUBLISHING, Stage.RETRIEVING,
+        Stage.FAILED, Stage.CANCELLED,
+    }),
+    # AWAITING_REVIEW can transition to: ANALYZING (refinement), PUBLISHING (approved),
+    # REJECTED (reviewer rejected or timeout).
+    Stage.AWAITING_REVIEW: frozenset({
+        Stage.ANALYZING, Stage.PUBLISHING, Stage.REJECTED, Stage.CANCELLED,
     }),
     Stage.PUBLISHING: frozenset({Stage.PUBLISHING, Stage.COMPLETED, Stage.FAILED, Stage.CANCELLED}),
     Stage.COMPLETED:  frozenset(),
     Stage.FAILED:     frozenset(),
     Stage.CANCELLED:  frozenset(),
+    Stage.REJECTED:   frozenset(),
 }
 
 

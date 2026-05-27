@@ -228,6 +228,34 @@ run-worker-dev: ## Run the worker with pretty console logging
 	APP__LOG_FORMAT=console APP__LOG_LEVEL=DEBUG \
 		uv run python -m trendstorm.orchestration.workers.orchestrator_worker
 
+.PHONY: worker-review-timeout
+worker-review-timeout: ## Run the review timeout sweeper worker locally
+	uv run python -m trendstorm.orchestration.workers.review_timeout_worker
+
+# -----------------------------------------------------------------------------
+# Python SDK
+# -----------------------------------------------------------------------------
+.PHONY: sdk-install
+sdk-install: ## Install trendstorm-shared + SDK in editable mode
+	pip install -e packages/trendstorm-shared && \
+	pip install -e "sdk/python[dev]"
+
+.PHONY: sdk-test
+sdk-test: ## Run SDK unit tests (pure, no network I/O)
+	cd sdk/python && pytest tests/unit -m unit -v
+
+.PHONY: sdk-test-integration
+sdk-test-integration: ## Run SDK integration tests (requires TRENDSTORM_API_KEY + make up-app)
+	cd sdk/python && pytest tests/integration -m integration -v
+
+.PHONY: sdk-docs
+sdk-docs: ## Build SDK docs locally (output: sdk/python/site/)
+	cd sdk/python && mkdocs build --config-file docs/mkdocs.yml
+
+.PHONY: sdk-docs-serve
+sdk-docs-serve: ## Serve SDK docs with live reload
+	cd sdk/python && mkdocs serve --config-file docs/mkdocs.yml
+
 .PHONY: lint
 lint: ## Run ruff lint
 	uv run ruff check src/ tests/

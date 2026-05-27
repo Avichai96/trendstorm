@@ -78,6 +78,37 @@ flowchart LR
 | `sse-coordinator-worker` | Kafka → Redis Streams → live SSE fanout | Kafka lag |
 | `production-eval-worker` | 1% production sample evaluation | Kafka lag |
 | `outbox-relay-worker` | MongoDB outbox → Kafka (atomic job creation) | 1–2 replicas |
+| `review-timeout-worker` | Auto-reject HITL reviews past SLA (single replica Recreate) | N/A |
+
+---
+
+## Using the SDK
+
+```bash
+pip install trendstorm
+```
+
+```python
+import asyncio
+from trendstorm_sdk import TrendStormClient
+
+async def main():
+    async with TrendStormClient(api_key="ts_live_...") as ts:
+        # Create a category and register sources
+        cat = await ts.categories.create(name="AI Safety", keywords=["alignment"])
+        src = await ts.sources.add(category_id=cat.id, url="https://arxiv.org/rss/cs.AI")
+
+        # Submit and stream a job
+        job = await ts.jobs.create(category_id=cat.id, source_ids=[src.id])
+        async for event in ts.jobs.stream(job.job_id):
+            print(event.event_type.value, event.payload)
+            if event.event_type.is_terminal:
+                break
+
+asyncio.run(main())
+```
+
+Full SDK docs: [sdk/python/README.md](sdk/python/README.md) · [sdk/python/examples/](sdk/python/examples/)
 
 ---
 

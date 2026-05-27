@@ -184,6 +184,59 @@ groups:
           runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/kafka-lag.md"
 
   # --------------------------------------------------------------------------
+  # HITL review queue aging — pending reviews approaching SLA timeout
+  # --------------------------------------------------------------------------
+  - name: hitl_review
+    rules:
+      - alert: PendingReviewsAgingHigh
+        expr: |
+          (
+            time() - min(trendstorm_reviews_pending_oldest_created_at) by (tenant_id_hash)
+          ) / 3600
+          > 38.4
+        for: 10m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "Pending HITL review aging > 80% of 48h SLA"
+          description: |
+            A pending review for tenant bucket {{ $labels.tenant_id_hash }} has been
+            waiting {{ $value | printf "%.1f" }}h, which is more than 80% of the default
+            48h SLA. If not resolved, the sweeper will auto-reject the analysis.
+            Check the /v1/reviews API for the pending review and assign a reviewer.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/review-aging.md"
+
+      - alert: PendingReviewsAgingWarning
+        expr: |
+          (
+            time() - min(trendstorm_reviews_pending_oldest_created_at) by (tenant_id_hash)
+          ) / 3600
+          > 24
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Pending HITL review aging > 24h — reviewer attention needed"
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/review-aging.md"
+
+      - alert: ReviewTimeoutSweepSpike
+        expr: |
+          rate(trendstorm_review_timeout_total[15m]) > 0.033
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Review timeout sweeper expiring > 2 reviews/minute"
+          description: |
+            The timeout sweeper is auto-rejecting reviews at {{ $value | printf "%.2f" }}/s.
+            This may indicate reviewers are unavailable, the SLA window is too short,
+            or the sweeper processed a backlog after a downtime.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/review-aging.md"
+
+  # --------------------------------------------------------------------------
   # ChromaDB health — vector store down
   # --------------------------------------------------------------------------
   - name: vector_store

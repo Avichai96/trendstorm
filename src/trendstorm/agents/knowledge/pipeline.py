@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from trendstorm.domain.llm.providers import EmbeddingProvider
     from trendstorm.domain.vectors.store import VectorStore
     from trendstorm.infrastructure.blob.minio_client import MinioClient
+    from trendstorm.infrastructure.security.pii import PIIDetector
 
 logger = get_logger(__name__)
 
@@ -69,12 +70,14 @@ class KnowledgePipeline:
         chunk_repo: ChunkRepository,
         vector_store: VectorStore,
         minio: MinioClient,
+        pii_detector: PIIDetector | None = None,
     ) -> None:
         self._chunker = chunker
         self._embed = embedding_provider
         self._chunk_repo = chunk_repo
         self._vector_store = vector_store
         self._minio = minio
+        self._pii = pii_detector
 
     async def process_document(
         self,
@@ -205,8 +208,23 @@ class KnowledgePipeline:
 
         # ------------------------------------------------------------------
         # 6. Embed children in batches (respects provider.max_batch_size)
+        # PII redaction runs here so private data is never sent to external
+        # embedding providers. Original text stays in Mongo (internal store).
         # ------------------------------------------------------------------
-        child_texts = [c.text for c in child_chunks]
+        child_texts: list[str] = []
+        for child in child_chunks:
+            if self._pii is not None:
+                result = self._pii.detect_and_redact(child.text)
+                if result.has_pii:
+                    logger.warning(
+                        "knowledge.pii_redacted_before_embed",
+                        document_id=document_id,
+                        chunk_id=child.id,
+                        pii_types=[d.pii_type for d in result.detections],
+                    )
+                child_texts.append(result.redacted_text)
+            else:
+                child_texts.append(child.text)
         all_vectors: list[list[float]] = []
         max_batch = self._embed.max_batch_size
 

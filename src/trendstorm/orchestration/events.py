@@ -284,6 +284,46 @@ class StreamPartialEvent(EventEnvelope):
     )
 
 
+class ReviewRequestedEvent(EventEnvelope):
+    """Topic: trendstorm.review.requested.v1.
+
+    Published by review_gate_node when a job's analysis is held for human
+    review. The SSE coordinator forwards this to the tenant's live stream as
+    a review_required event. Reviewers poll GET /v1/reviews?status=pending
+    or rely on SSE to know a review is waiting.
+    """
+
+    event_type: Literal["review.requested"] = "review.requested"
+    job_id: str
+    review_id: str
+    analysis_id: str
+    validator_score: float
+    refinement_loops: int
+    cost_so_far_usd: float = 0.0
+    timeout_at: datetime
+
+
+class ReviewResolvedEvent(EventEnvelope):
+    """Topic: trendstorm.review.resolved.v1.
+
+    Published via outbox by the review API (POST /v1/reviews/{id}/resolve) and
+    directly by the timeout sweeper worker. The orchestrator consumes this to
+    resume the LangGraph workflow with the reviewer's decision.
+
+    decision: one of "approve" | "reject" | "request_refinement"
+    comment: present only when decision=request_refinement; forwarded as the
+             next analyst loop's refinement_notes.
+    resolved_by: reviewer principal (key_id / JWT subject) or "timeout_sweeper".
+    """
+
+    event_type: Literal["review.resolved"] = "review.resolved"
+    job_id: str
+    review_id: str
+    decision: str         # ReviewDecision value
+    comment: str | None = None
+    resolved_by: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Discriminated union — lets a single consumer parse any event type.
 # Use:  parsed = TypeAdapter(AnyEvent).validate_json(message_bytes)
@@ -296,6 +336,7 @@ AnyEvent = Annotated[
     | AnalysisPendingEvent | AnalysisCompletedEvent
     | PublishPendingEvent | PublishCompletedEvent
     | StreamPartialEvent
-    | EvalSampleEvent,
+    | EvalSampleEvent
+    | ReviewRequestedEvent | ReviewResolvedEvent,
     Field(discriminator="event_type"),
 ]

@@ -43,6 +43,14 @@ class Collection(StrEnum):
     # ---- Outbox pattern ----
     OUTBOX = "outbox"
 
+    # ---- Security (Phase 13) ----
+    AUDIT_LOG = "audit_log"
+    URL_BLOCKLISTS = "url_blocklists"
+
+    # ---- HITL review (Phase 13.5) ----
+    REVIEWS = "reviews"
+    TENANT_SETTINGS = "tenant_settings"
+
     # ---- LangGraph-owned (we don't write to these directly) ----
     # These are listed for completeness; the LangGraph saver manages them.
     CHECKPOINTS = "checkpoints"

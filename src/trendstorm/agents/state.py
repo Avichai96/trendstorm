@@ -173,7 +173,7 @@ class JobState(BaseModel):
     )
 
     # --- Schema versioning ----------------------------------------------
-    schema_version: int = 1
+    schema_version: int = 2
 
     # --- Identity --------------------------------------------------------
     job_id: str
@@ -198,6 +198,16 @@ class JobState(BaseModel):
     retrieval: RetrievalState = Field(default_factory=RetrievalState)
     analysis: AnalysisState = Field(default_factory=AnalysisState)
     publishing: PublishingState = Field(default_factory=PublishingState)
+
+    # --- HITL review state ----------------------------------------------
+    # Set to the ReviewRequest.id when the job is paused for human review.
+    pending_review_id: str | None = None
+    # Reviewer comment from a "request_refinement" decision; fed into the
+    # next AnalysisPendingEvent as refinement_notes and cleared after use.
+    review_decision_comment: str | None = None
+    # Set True after a review resolves so review_gate_node does not re-gate
+    # a refinement-loop analysis that already passed human review.
+    skip_hitl_gate: bool = False
 
     # --- Error log ------------------------------------------------------
     errors: list[StageError] = Field(default_factory=list)

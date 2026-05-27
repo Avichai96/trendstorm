@@ -48,6 +48,10 @@ class ApiKey(BaseModel):
 
     Key format: `ts_{env}_{32_url_safe_random_chars}`
     Hash format: `sha256(plaintext_key)` as lowercase hex
+
+    Roles: a list of role strings (e.g. ["reviewer"]). Empty list = standard
+    access. Roles are per-key so a tenant can have separate app keys and
+    reviewer keys with different permissions. Default empty — backward-compatible.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -57,6 +61,7 @@ class ApiKey(BaseModel):
     name: str                       # human label (e.g. "CI pipeline", "mobile app")
     key_hash: str                   # SHA-256 hex of the plaintext key
     key_prefix: str                 # first 8 chars of the random portion (for display)
+    roles: list[str] = Field(default_factory=list)  # e.g. ["reviewer"]
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     last_used_at: datetime | None = None
@@ -76,6 +81,9 @@ class AuthContext(BaseModel):
 
     Downstream handlers read `tenant_id` from this; they never touch raw
     headers or JWT claims directly.
+
+    roles: propagated from ApiKey.roles (key auth) or the JWT "roles" claim
+    (JWT auth). Empty list = standard access. `require_role()` dependency checks this.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -84,3 +92,4 @@ class AuthContext(BaseModel):
     key_id: str | None = None       # set when authenticated via API key
     subject: str | None = None      # JWT `sub` claim when authenticated via JWT
     source: AuthSource = "legacy"   # how auth was established
+    roles: list[str] = Field(default_factory=list)  # e.g. ["reviewer"]

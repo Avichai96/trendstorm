@@ -35,6 +35,8 @@
 - `trendstorm-orchestrator` (Kafka consumer driving LangGraph).
 - Phase 6+: `trendstorm-scout`, `trendstorm-knowledge`, `trendstorm-analyst`, `trendstorm-publisher`, `trendstorm-sse-coordinator` (each is its own Kafka worker).
 - Phase 11+: `trendstorm-production-eval` (1% sample eval worker).
+- Phase 13.5+: `trendstorm-review-timeout` (polling sweeper, single replica Recreate).
+- Phase 14+: **Python SDK** at `sdk/python/` (PyPI: `trendstorm`); shared models at `packages/trendstorm-shared/` (PyPI: `trendstorm-shared`).
 
 ### Directory layout
 ```
@@ -48,14 +50,18 @@ src/trendstorm/
     llm/           gemini, openai, ollama, retry, registry, anthropic (Phase 7)
     vectors/       chroma_store                                       (Phase 7)
     blob/          minio_client (+download), uri                      (Phase 6-7)
+    security/      ssrf.py, sanitize.py, pii.py, blocklist.py        (Phase 13)
   domain/          jobs, categories, sources, documents, chunks,
                    analyses, reports (each: models.py, repository.py) (Phase 4-5)
                    llm/{providers,models}, vectors/{store,models}     (Phase 7)
                    evaluation/{models,evaluator,judge}                (Phase 11)
+                   audit_log/{models,repository}, url_blocklists/{models,repository} (Phase 13)
+                   reviews/{models,repository}, tenant_settings/{models,repository} (Phase 13.5)
   agents/          stages, state, orchestrator/{nodes,edges,graph,checkpointer}  (Phase 4)
                    knowledge/{tokenizer,chunker,pipeline}             (Phase 7)
                    production_eval/pipeline                           (Phase 11)
   orchestration/   topics, events, workers/orchestrator_worker        (Phase 4)
+                   workers/review_timeout_worker                      (Phase 13.5)
   services/        job_service, category_service, source_service      (Phase 4-5)
   utils/           headers_docs.py (OpenAPI documentation helpers)
 tests/
@@ -63,16 +69,25 @@ tests/
   integration/     full stack via `make up`                            (-m integration)
 docker/            docker-compose.{yml,obs,dev,app}.yml + Dockerfiles
 scripts/           healthcheck.py, smoke_test.py, seed_mongo_indexes.py
+packages/
+  trendstorm-shared/  shared API contract types (enums + models)      (Phase 14)
+sdk/
+  python/
+    src/trendstorm_sdk/  async + sync client, SSE, retry, auth, errors (Phase 14)
+    examples/            quickstart.py, hitl_reviewer.py, cost_dashboard.py
+    tests/unit/          SDK unit tests (respx mocks, no network)
+    tests/integration/   SDK integration tests (live API required)
+    docs/                MkDocs-material documentation site
 ```
 
 ---
 
 ## 2. Current State of the System
 
-TrendStorm is production-ready through Phase 12. The full pipeline runs end-to-end:
-POST /v1/jobs → orchestrator → scout → knowledge → analyst → publisher → SSE delivery.
+TrendStorm is production-ready through Phase 14. The full pipeline runs end-to-end with security hardening and human review gating, and a versioned Python SDK ships alongside the server:
+POST /v1/jobs → orchestrator → scout (SSRF-validated) → knowledge (PII-redacted) → analyst (injection-contained) → [review gate: approve/reject/refine] → publisher (sanitized) → SSE delivery.
 
-### Deployable services (9)
+### Deployable services (10)
 
 | Service | Purpose | Scaling signal |
 |---|---|---|
@@ -85,10 +100,11 @@ POST /v1/jobs → orchestrator → scout → knowledge → analyst → publisher
 | sse-coordinator-worker | Kafka → Redis Streams fanout | Kafka lag |
 | production-eval-worker | 1% production sample eval | Kafka lag |
 | outbox-relay-worker | Mongo outbox → Kafka | 1-2 replicas (Recreate) |
+| review-timeout-worker | Auto-expire pending reviews past SLA | N/A (single replica Recreate) |
 
 ### Phase completion history
 
-All 12 build phases are complete. For detailed per-phase architecture decisions, see [docs/architecture-history/](docs/architecture-history/).
+All phases through 13.5 are complete. For detailed per-phase architecture decisions, see [docs/architecture-history/](docs/architecture-history/).
 
 | Phase | Title | Doc |
 |---|---|---|
@@ -104,15 +120,30 @@ All 12 build phases are complete. For detailed per-phase architecture decisions,
 | 10 | Observability deep dive | [phase-10](docs/architecture-history/phase-10-observability.md) |
 | 11 | Evaluation pipeline | [phase-11](docs/architecture-history/phase-11-evaluation.md) |
 | 12 | Production readiness | [phase-12](docs/architecture-history/phase-12-production-readiness.md) |
+| 13 | Prompt injection defense & SSRF hardening | [phase-13](docs/architecture-history/phase-13-security-hardening.md) |
+| 13.5 | Human-in-the-loop review queue | [phase-13.5](docs/architecture-history/phase-13_5-hitl.md) |
+| 14 | Python SDK + shared models package | [phase-14](docs/architecture-history/phase-14-sdk.md) |
 
 ### What works end-to-end
 
 - `make up` → infra (Mongo replica set, Kafka KRaft, Redis, ChromaDB, MinIO, Ollama)
-- `make seed-indexes` → all Mongo indexes (idempotent)
+- `make seed-indexes` → all Mongo indexes (idempotent, includes `audit_log` and `url_blocklists`)
 - `make up-obs` → OTel Collector, Jaeger, Prometheus, Loki, Grafana (trendstorm-overview dashboard)
-- `make up-app` → api + all 9 workers (each exposes `/metrics` on port 9090)
+- `make up-app` → api + all 10 workers (each exposes `/metrics` on port 9090)
 - Full distributed trace via OTel, Prometheus metrics per stage, structured logs via Loki
-- Test suites: `tests/unit/` (927 tests, no Docker); `tests/integration/` exercises real infra
+- Test suites: `tests/unit/` (1046 tests, no Docker); `tests/integration/` exercises real infra; `sdk/python/tests/unit/` SDK unit tests (respx mocks)
+- SSRF validation on every Scout URL (initial + each redirect hop, max 3 hops)
+- Global blocklist loaded from `ops/security/global-blocklist.txt`; per-tenant blocklist in `url_blocklists` collection
+- Chunk content wrapped in `<chunk>` tags with explicit data/instruction boundary rules in analyst prompt
+- Validator `injection_resistance` dimension (weight 0.10) detects and penalizes hijacked analyses
+- PII detection via `DefaultPIIDetector` (SSN, CC, email, phone, IBAN) before LLM submission
+- Output sanitization strips XSS vectors from analysis text before persistence
+- `audit_log` collection records all SSRF blocks, PII detections, and blocklist hits (365-day TTL)
+- `trendstorm_security_block_total{reason, tenant_id_hash}` Prometheus counter for all security events
+- 5 adversarial golden examples in `eval/golden/adversarial/` covering injection, role-reassignment, exfiltration, SSRF-in-HTML
+- HITL review queue: per-tenant modes (off/always/flagged_only), 48h SLA with auto-reject sweeper, reviewer role on API keys, atomic Mongo transaction for resolve via outbox pattern
+- `Stage.AWAITING_REVIEW` and `Stage.REJECTED` (terminal, distinct from FAILED); `skip_hitl_gate` guard on JobState prevents re-gating after review resolution
+- `/v1/reviews` API (list, get, resolve) gated by `require_role("reviewer")`; `PendingReviewsAgingHigh` alert fires at 80% of SLA
 
 ### Architecture Decision Records
 
@@ -126,8 +157,8 @@ See [Section 3](#3-next-steps--pending-tasks) below.
 
 ## 3. Next Steps & Pending Tasks
 
-### Phase 13 (next — not started)
-Multi-region deployment + data residency (ADR 001 trigger conditions), infrastructure-as-code (Terraform/Pulumi), Velero backups.
+### Phase 15 (next — not started)
+Multi-region deployment + data residency (ADR 001 trigger conditions), infrastructure-as-code (**Terraform**), Velero backups.
 
 ### Pending polish items
 - **RetryingChatProvider**: `RetryingEmbeddingProvider` covers embeddings; consider an equivalent wrapper for transient errors on the Analyst hot path (separate from Kafka-level retry which is too coarse for multi-step LLM flows). Runbook [llm-rate-limit.md](ops/runbooks/llm-rate-limit.md) calls this out as prevention.
@@ -353,6 +384,66 @@ Multi-region deployment + data residency (ADR 001 trigger conditions), infrastru
 72. **Argo Rollouts `AnalysisTemplate` gates on HTTP 5xx error rate < 1%.** The canary analysis queries Prometheus every 30s; fails if 3 consecutive readings are below 99% success. This is the minimum viable gate for production safety. Add latency p99 as a second metric when baseline latency data is available.
 
 73. **NetworkPolicies use allowlist (default-deny) posture.** Both `default-deny-ingress` and `default-deny-egress` policies apply to all pods in the `trendstorm` namespace. Every traffic flow is explicitly permitted in `k8s/network-policies.yaml`. When adding a new worker or external service, add the corresponding egress policy before deploying.
+
+### Phase 13 — Security hardening conventions
+
+74. **`validate_url(url, *, resolved_addrs=None) -> ValidatedURL` is the ONLY function that validates URLs for SSRF.** Located at `infrastructure/security/ssrf.py`. `resolved_addrs` is an injectable override for unit tests (no DNS I/O in tests). Production code calls this from `asyncio.get_event_loop().run_in_executor(None, validate_url, url)` because socket.getaddrinfo is blocking. Never bypass this function for any outbound HTTP fetch.
+
+75. **Every redirect hop is validated separately via `validate_redirect(from_url, to_url)`.** The Scout fetcher (`agents/scout/fetcher.py`) follows redirects manually with `follow_redirects=False`. Max 3 redirects (hard constant `MAX_REDIRECTS` in `ssrf.py`, not from config). Scheme downgrade (https→http) is blocked on any hop. On block: increment `trendstorm_security_block_total`, write to `audit_log`, raise `SSRFBlockedError` (a `FetchError` subclass).
+
+76. **`SSRFBlockedError.reason` MUST match a `SecurityBlockReason` enum value.** `SecurityBlockReason` is defined in `shared/metrics/registry.py`. The reason is used as a Prometheus label (`trendstorm_security_block_total{reason=...}`). Never pass a raw string that isn't in the enum — the label cardinality is bounded by the enum.
+
+77. **Security block metrics use `tenant_id_hash`, never raw `tenant_id`.** Call `record_security_block(reason, tenant_id)` from `shared/metrics/registry.py`. It computes `tenant_id_hash = f"b{hash(tenant_id) % 100:02d}"` internally (100 bounded buckets). Never call `METRICS.security_blocks.labels(tenant_id=...)` directly — `tenant_id` is in `_FORBIDDEN_LABELS`.
+
+78. **`audit_log` collection writes are fire-and-forget (fail-open).** `MongoAuditLogRepository.append()` catches all exceptions and logs a warning rather than raising. A transient Mongo error must never abort an SSRF check or PII detection path. The audit log is observability infrastructure, not a hard dependency.
+
+79. **`AuditLogEntry` has `extra="forbid"` and is `frozen=True`.** It is never mutated after creation. TTL is 365 days (regulatory minimum). `event_type` values used in the codebase: `"ssrf_blocked"`, `"url_blocked"`, `"pii_detected"`. Add new event types here as they are introduced.
+
+80. **Chunk content is wrapped in `<chunk id="..." source="...">` tags** before injection into the analyst user message (`services/analysis/analyst.py:_format_user_message`). The analyst system prompt (`analyst_system.md`) contains the CRITICAL SECURITY RULE section that explicitly forbids following instructions embedded in chunk content. Never remove this section or the `<chunk>` delimiters — they are the primary prompt injection defense.
+
+81. **The validator rubric has 6 dimensions (not 5) as of Phase 13.** Weights: grounding=0.28, faithfulness=0.23, quality=0.18, coverage=0.13, specificity=0.08, injection_resistance=0.10. Sum=1.00. `injection_resistance` score of 0.0 forces `passed=false` regardless of other scores. Do not remove or reweight this dimension without updating both `validator_system.md` and all golden examples that test for it.
+
+82. **PII detection runs via `DefaultPIIDetector.detect_and_redact(text)` before chunk text is sent to external LLMs.** The detector is Protocol-typed (`PIIDetector` in `infrastructure/security/pii.py`) for future Presidio integration. On detection: redact in-place (`[REDACTED:SSN]` etc.), write to `audit_log`, call `record_security_block(pii_type, tenant_id)`. The `detect_and_redact` method is pure (no I/O) — all side effects are the caller's responsibility.
+
+83. **Global URL blocklist is loaded from `ops/security/global-blocklist.txt` at module import** in `infrastructure/security/blocklist.py`. It is a frozenset — zero per-request I/O. Per-tenant blocklist entries live in MongoDB `url_blocklists` collection and are cached in-process for 60 s per tenant via `_TENANT_CACHE`. Cache miss triggers a `list_for_tenant` query. Cache does NOT invalidate across worker processes — new blocklist entries take up to 60 s + any number of running workers to propagate.
+
+84. **`sanitize_text(text)` MUST be called before persisting analysis text** and before rendering HTML/PDF reports. Located at `infrastructure/security/sanitize.py`. Strips `<script>`, `<style>`, `<iframe>`, `<object>`, `on*=` event handlers, `javascript:` URIs, and `data:` URIs. Use `html_escape(text)` for raw text interpolated into HTML attributes or nodes in report templates.
+
+85. **Adversarial golden examples live in `eval/golden/adversarial/`.** Each JSON file follows the same `GoldenExample` schema as other goldens, with additional fields: `expected_analysis.forbidden_phrases` (list of strings that must NOT appear in any output), `expected_analysis.injection_resistance_min_score`, `expected_analysis.adversarial_chunk_id`. Eval runner must check forbidden phrases and the injection_resistance dimension score.
+
+### Phase 13.5 — HITL review queue conventions
+
+86. **`review_gate_node` is dual-mode.** Check `config.get("configurable", {}).get("kafka_producer")`. If `None` (unit tests), always return `{stage: PUBLISHING}`. If present, load `TenantSettings`, evaluate flagging criteria, and either pass through or create a `ReviewRequest` + publish `ReviewRequestedEvent`. Never remove the stub path — it is load-bearing for the unit test suite (same pattern as all other handoff nodes, rule 43).
+
+87. **`skip_hitl_gate=True` bypasses `review_gate_node` entirely.** The orchestrator sets this flag when injecting state on any review resolution (approve, reject, or refinement). The node checks it FIRST — before loading settings or Kafka. It resets the flag to `False` on the returned state update so future pipeline cycles gate normally. This prevents re-gating after refinement loops.
+
+88. **`AWAITING_REVIEW → FAILED` is NOT a valid transition.** The only terminal outcomes from `AWAITING_REVIEW` are `PUBLISHING` (approved), `ANALYZING` (refinement requested), `REJECTED` (rejected or timed out), and `CANCELLED`. If a system error occurs during review, it surfaces via `REJECTED` (timeout sweeper) — not `FAILED`. This is by design: `FAILED` means the system broke; `REJECTED` means a human (or timeout) made a decision.
+
+89. **`Stage.REJECTED` is a terminal stage distinct from `Stage.FAILED`.** `REJECTED` means the analysis was reviewed and declined; `FAILED` means a pipeline error. Both have empty successor sets. The `is_terminal` property covers both. `JobStatus.REJECTED` maps to HTTP 200 (job returned, status is informational); do not treat it as an error response.
+
+90. **Review resolve goes through the outbox, not direct Kafka.** `POST /v1/reviews/{id}/resolve` writes a `ReviewRequest` update + `OutboxEntry` in a single Mongo `start_transaction()` session. The `OutboxRelayWorker` then publishes `ReviewResolvedEvent` to Kafka. This is the same pattern as `JobService.create_job`. Never call `KafkaProducerClient.send_and_wait` directly from an API handler — that breaks the atomicity guarantee if Kafka is down at resolve time.
+
+91. **`list_expired_pending()` is the only cross-tenant Mongo query in the system.** `MongoReviewRepository.list_expired_pending()` intentionally bypasses `_tenant_query()` — the sweeper must scan all tenants for expired reviews. This is the documented exception to Rule 3. All other `MongoReviewRepository` methods go through `_tenant_query()`.
+
+92. **The timeout sweeper deploys as single replica (`strategy: Recreate`).** Two sweeper replicas don't cause data corruption (the `mark_timed_out` findOneAndUpdate is atomic), but they do cause double-publishing to Kafka and double SSE events. `Recreate` prevents this. The `PendingReviewsAgingHigh` alert covers the sweeper being down (fires at 80% of SLA = 38.4h before auto-reject).
+
+93. **`require_role(role)` is a FastAPI `Depends` factory, not a decorator.** It returns `Depends(_check)` where `_check` reads `request.state.auth_context.roles` (populated by `AuthMiddleware`). The `reviewer` role is required on the `/v1/reviews` router. Roles are stored on `ApiKey.roles: list[str]` (default `[]` — backward-compatible). JWT authentication reads roles from the `roles` claim (string or list).
+
+94. **`trendstorm_reviews_pending_oldest_created_at` (Gauge) is the aging signal for alerting.** Workers that create or resolve `ReviewRequest` records must keep this gauge updated: `METRICS.reviews_pending_oldest_created_at.labels(tenant_id_hash=...).set(oldest_review.created_at.timestamp())`. When all pending reviews resolve, set to 0. The `PendingReviewsAgingHigh` alert computes `(time() - gauge) / 3600 > 38.4` — wrong or stale gauge values produce false positives/negatives.
+
+95. **`TenantSettings` is optional — absent row means `DEFAULT_TENANT_SETTINGS` (HITL off).** `MongoTenantSettingsRepository.get_for_tenant` returns `None` for tenants without a settings row. All callers must handle `None → DEFAULT_TENANT_SETTINGS`. Existing tenants without a row behave as `hitl_mode=OFF` — no behavior change unless a row is explicitly created. This is the fail-open design: new infrastructure does not force HITL on tenants who haven't opted in.
+
+### Phase 14 — SDK conventions
+
+96. **`trendstorm-shared` is the single source of truth for the API wire format.** Enums (`JobStatus`, `SourceType`, `ReportFormat`, `ReviewStatus`, `ReviewDecision`, `StreamEventType`) and request/response models live in `packages/trendstorm-shared/src/trendstorm_shared/`. When adding a new API field: add it to the shared model first, then update the server router. The server does NOT import from `trendstorm-shared` at runtime (no circular dep); the shared package is consumed by the SDK and by cross-package wire-format tests.
+
+97. **SDK models use `extra="ignore"`, server models use `extra="forbid"`.** The server validates requests strictly (extra fields = bug). The SDK parses responses permissively so an older SDK version doesn't break when the server adds an optional field. This is the opposite convention and is intentional — never flip them.
+
+98. **The SDK Python import is `trendstorm_sdk`; the PyPI name is `trendstorm`.** The server's Python package is `trendstorm` (at `src/trendstorm/`). In the monorepo both coexist because they're in different directories, but `pip install trendstorm` installs the SDK. The server is never published to PyPI. Do not rename the SDK import namespace.
+
+99. **`retry_request()` in `sdk/python/src/trendstorm_sdk/_retry.py` is a function, not a transport subclass.** It wraps a zero-argument coroutine so SSE streaming bypasses retry logic entirely. A transport-level retry would intercept streaming responses (status 200 with `text/event-stream`) and attempt to buffer/retry them, which corrupts the event stream. Never move retry to the transport layer.
+
+100. **SDK integration tests run only when `TRENDSTORM_API_KEY` is set; otherwise they skip.** `sdk/python/tests/integration/conftest.py` calls `pytest.skip()` if the env var is absent. Integration tests are not part of `make test` (server unit suite) — run via `make sdk-test-integration`. Staging-only tests are marked `@staging` and run only on main-branch CI.
 
 ---
 

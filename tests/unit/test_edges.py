@@ -16,11 +16,13 @@ from trendstorm.agents.orchestrator.edges import (
     NODE_PUBLISH,
     NODE_REFINE,
     NODE_RETRIEVE,
+    NODE_REVIEW_GATE,
     after_analyze,
     after_embed,
     after_ingest,
     after_publish,
     after_retrieve,
+    after_review_gate,
 )
 from trendstorm.agents.stages import Stage
 from trendstorm.agents.state import (
@@ -127,12 +129,13 @@ class TestAfterRetrieve:
 
 @pytest.mark.unit
 class TestAfterAnalyze:
-    def test_passed_goes_to_publish(self) -> None:
+    def test_passed_goes_to_review_gate(self) -> None:
+        """Successful analysis always passes through review_gate_node."""
         s = _state(
             stage=Stage.ANALYZING,
             analysis=AnalysisState(validation_passed=True, validation_score=0.9),
         )
-        assert after_analyze(s) == NODE_PUBLISH
+        assert after_analyze(s) == NODE_REVIEW_GATE
 
     def test_failed_with_refinement_budget_refines(self) -> None:
         s = _state(
@@ -142,22 +145,49 @@ class TestAfterAnalyze:
         )
         assert after_analyze(s) == NODE_REFINE
 
-    def test_failed_at_refinement_cap_publishes_anyway(self) -> None:
-        """Graceful degradation: low confidence still beats no report."""
+    def test_failed_at_refinement_cap_goes_to_review_gate(self) -> None:
+        """Graceful degradation: low confidence still beats no report; HITL gate decides."""
         s = _state(
             stage=Stage.ANALYZING,
             analysis=AnalysisState(validation_passed=False, validation_score=0.5),
             refinement_loops=MAX_REFINEMENT_LOOPS,
         )
-        assert after_analyze(s) == NODE_PUBLISH
+        assert after_analyze(s) == NODE_REVIEW_GATE
 
-    def test_failed_no_analyze_budget_publishes_anyway(self) -> None:
+    def test_failed_no_analyze_budget_goes_to_review_gate(self) -> None:
         s = _state(
             stage=Stage.ANALYZING,
             analysis=AnalysisState(validation_passed=False, validation_score=0.5),
             attempts={Stage.ANALYZING: 99},
         )
-        assert after_analyze(s) == NODE_PUBLISH
+        assert after_analyze(s) == NODE_REVIEW_GATE
+
+
+# ---------------------------------------------------------------------------
+# after_review_gate
+# ---------------------------------------------------------------------------
+
+@pytest.mark.unit
+class TestAfterReviewGate:
+    def test_publishing_goes_to_publish(self) -> None:
+        """HITL off or approved → proceed to publish."""
+        s = _state(stage=Stage.PUBLISHING)
+        assert after_review_gate(s) == NODE_PUBLISH
+
+    def test_awaiting_review_goes_to_end(self) -> None:
+        """Paused for human review → graph terminates at END (interrupted)."""
+        s = _state(stage=Stage.AWAITING_REVIEW)
+        assert after_review_gate(s) == NODE_END
+
+    def test_unexpected_stage_fails(self) -> None:
+        """Any other stage means something went wrong → FAIL."""
+        s = _state(stage=Stage.FAILED)
+        assert after_review_gate(s) == NODE_FAIL
+
+    def test_analyzing_stage_fails(self) -> None:
+        """ANALYZING is not a valid outcome of review_gate_node."""
+        s = _state(stage=Stage.ANALYZING)
+        assert after_review_gate(s) == NODE_FAIL
 
 
 # ---------------------------------------------------------------------------

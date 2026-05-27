@@ -240,6 +240,42 @@ slos:
     runbook: ops/runbooks/mongo-connections.md
 
   # ---------------------------------------------------------------------------
+  # HITL review SLA — oldest pending review age < 38.4h (80% of 48h SLA)
+  # ---------------------------------------------------------------------------
+  - id: hitl-review-aging
+    description: >
+      The oldest pending HITL review in any tenant must be resolved before
+      reaching 80% of the 48-hour SLA window (38.4 hours). Exceeding this
+      means the auto-reject sweeper will soon cancel the paused analysis.
+    metric: trendstorm_reviews_pending_oldest_created_at
+    signal: saturation
+    objective: 138240          # 38.4 hours in seconds (80% of 48h SLA)
+    percentile: null
+    window: 10m
+    page_threshold: 138240     # page when oldest review exceeds 80% of SLA
+    warn_threshold: 86400      # warn at 24h
+    severity: page
+    runbook: ops/runbooks/review-aging.md
+
+  # ---------------------------------------------------------------------------
+  # HITL review resolution latency (approve/reject/refinement p90 < 24h)
+  # ---------------------------------------------------------------------------
+  - id: hitl-review-resolution-latency
+    description: >
+      90% of HITL review decisions (approve, reject, request_refinement) are
+      made within 24 hours of the review being created. This is a quality-of-
+      service target for the review process, not a hard SLO.
+    metric: trendstorm_review_resolution_seconds
+    signal: latency
+    objective: 86400           # 24 hours
+    percentile: p90
+    window: 24h
+    page_threshold: 172800     # page if p90 exceeds 48h (full SLA consumed)
+    warn_threshold: 86400      # warn at 24h
+    severity: warn
+    runbook: ops/runbooks/review-aging.md
+
+  # ---------------------------------------------------------------------------
   # Vector store (ChromaDB) availability
   # ---------------------------------------------------------------------------
   - id: vector-store-availability

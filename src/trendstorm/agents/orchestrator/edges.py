@@ -29,6 +29,7 @@ NODE_EMBED = "embed"
 NODE_RETRIEVE = "retrieve"
 NODE_ANALYZE = "analyze"
 NODE_REFINE = "refine"
+NODE_REVIEW_GATE = "review_gate"   # HITL: pause or pass-through before publish
 NODE_PUBLISH = "publish"
 NODE_FAIL = "fail"
 NODE_END = "__end__"   # LangGraph's reserved terminal node
@@ -64,18 +65,15 @@ def after_retrieve(state: JobState) -> str:
 
 
 def after_analyze(state: JobState) -> str:
-    """Drive self-correction — the most interesting edge in the graph.
+    """Drive self-correction then hand off to the HITL review gate.
 
     Logic:
-        - If analysis passed validation: go publish.
-        - If analysis didn't pass AND we can refine: loop back via refine_node
-          which clears retrieval state and bumps the refinement counter.
-        - Otherwise: ship the (possibly-mediocre) result anyway — better to
-          give a partial answer than fail outright.
+        - If analysis didn't pass AND we can auto-refine: loop via refine_node.
+        - Otherwise (passed, or budget exhausted): proceed to review_gate_node
+          which either passes through (HITL off/not-flagged) or pauses the job
+          for human review (HITL on and flagged).
     """
-    if state.analysis.validation_passed:
-        return NODE_PUBLISH
-    if state.can_refine() and state.has_budget(Stage.ANALYZING):
+    if not state.analysis.validation_passed and state.can_refine() and state.has_budget(Stage.ANALYZING):
         logger.info(
             "analysis_refine",
             job_id=state.job_id,
@@ -83,11 +81,27 @@ def after_analyze(state: JobState) -> str:
             loop=state.refinement_loops,
         )
         return NODE_REFINE
-    # Out of refinement loops. Publish anyway; the report will note the
-    # low confidence score. Future: configurable "strict mode" that fails.
-    logger.info("analysis_publish_with_low_score", job_id=state.job_id,
-                score=state.analysis.validation_score)
-    return NODE_PUBLISH
+    if not state.analysis.validation_passed:
+        # Out of refinement loops. Forward to review gate; graceful degradation.
+        logger.info("analysis_forward_to_review_gate_low_score",
+                    job_id=state.job_id, score=state.analysis.validation_score)
+    return NODE_REVIEW_GATE
+
+
+def after_review_gate(state: JobState) -> str:
+    """Route after review_gate_node based on the stage it set.
+
+    PUBLISHING: HITL off, not flagged, or review was approved → proceed to publish.
+    AWAITING_REVIEW: job paused for human review → graph will be interrupted here.
+    FAILED: something went wrong during gate → fail the job.
+    """
+    if state.stage == Stage.PUBLISHING:
+        return NODE_PUBLISH
+    if state.stage == Stage.AWAITING_REVIEW:
+        # The graph will be interrupted by interrupt_after=[NODE_REVIEW_GATE].
+        # This branch only runs if the interrupt is not in effect (e.g. tests).
+        return NODE_END
+    return NODE_FAIL
 
 
 def after_publish(state: JobState) -> str:

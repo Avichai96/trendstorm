@@ -388,6 +388,19 @@ class SSESettings(BaseSettings):
     channel_prefix: str = "stream"
 
 
+class HitlSettings(BaseSettings):
+    """Human-in-the-loop review settings.
+
+    default_timeout_hours: Default SLA window for pending reviews. Overridden
+        per-tenant by TenantSettings.hitl_timeout_hours.
+    sweeper_interval_seconds: How often the review-timeout-worker polls for
+        expired reviews. 60s default keeps timeout precision within ±60s.
+    """
+
+    default_timeout_hours: int = Field(default=48, ge=1, le=720)
+    sweeper_interval_seconds: int = Field(default=60, ge=10, le=3600)
+
+
 # ---------------------------------------------------------------------------
 # Root settings — composes all subsystems
 # ---------------------------------------------------------------------------
@@ -427,6 +440,7 @@ class Settings(BaseSettings):
     analysis: AnalysisSettings = Field(default_factory=AnalysisSettings)
     sse: SSESettings = Field(default_factory=SSESettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
+    hitl: HitlSettings = Field(default_factory=HitlSettings)
 
     @classmethod
     def settings_customise_sources(

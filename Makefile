@@ -256,6 +256,47 @@ sdk-docs: ## Build SDK docs locally (output: sdk/python/site/)
 sdk-docs-serve: ## Serve SDK docs with live reload
 	cd sdk/python && mkdocs serve --config-file docs/mkdocs.yml
 
+# -----------------------------------------------------------------------------
+# Dashboard (web/dashboard)
+# -----------------------------------------------------------------------------
+DASHBOARD_DIR := web/dashboard
+
+.PHONY: dashboard-install
+dashboard-install: ## Install dashboard npm dependencies
+	cd $(DASHBOARD_DIR) && npm install
+
+.PHONY: dashboard-dev
+dashboard-dev: ## Start dashboard Vite dev server (port 5173, proxies /v1 to :8080)
+	cd $(DASHBOARD_DIR) && npm run dev
+
+.PHONY: dashboard-build
+dashboard-build: ## Production build → web/dashboard/dist/
+	cd $(DASHBOARD_DIR) && npm run build
+
+.PHONY: dashboard-test
+dashboard-test: ## Run Vitest unit tests
+	cd $(DASHBOARD_DIR) && npm test
+
+.PHONY: dashboard-test-e2e
+dashboard-test-e2e: ## Run Playwright E2E tests (requires PLAYWRIGHT_BASE_URL or preview server)
+	cd $(DASHBOARD_DIR) && npm run test:e2e
+
+.PHONY: dashboard-codegen
+dashboard-codegen: ## Regenerate src/api/types.generated.ts from live API
+	cd $(DASHBOARD_DIR) && npm run codegen
+
+.PHONY: dashboard-codegen-check
+dashboard-codegen-check: ## CI gate — fail if types.generated.ts is stale
+	cd $(DASHBOARD_DIR) && npm run codegen:check
+
+.PHONY: dashboard-lint
+dashboard-lint: ## ESLint + typecheck for the dashboard
+	cd $(DASHBOARD_DIR) && npm run typecheck && npm run lint
+
+.PHONY: helm-lint-dashboard
+helm-lint-dashboard: ## Lint the dashboard Helm chart
+	@helm lint helm/dashboard
+
 .PHONY: lint
 lint: ## Run ruff lint
 	uv run ruff check src/ tests/

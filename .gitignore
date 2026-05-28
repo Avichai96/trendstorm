@@ -49,6 +49,13 @@ docker/data/
 *.log
 logs/
 
+# --- Node ---
+node_modules/
+
 # --- Local tool outputs ---
 *.tmp
 .cache/
+*.tsbuildinfo
+
+# --- Claude Code (local session state) ---
+.claude/settings.local.json

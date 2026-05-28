@@ -1,0 +1,58 @@
+replicaCount: 2
+
+image:
+  repository: trendstorm/dashboard
+  pullPolicy: IfNotPresent
+  tag: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: dashboard.trendstorm.ai
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: dashboard-tls
+      hosts:
+        - dashboard.trendstorm.ai
+
+# Runtime config injected as /config.json via ConfigMap
+runtimeConfig:
+  apiBaseUrl: "https://api.trendstorm.ai"
+  auth0Domain: "trendstorm.auth0.com"
+  auth0ClientId: "REPLACE_ME"
+  auth0Audience: "https://api.trendstorm.ai"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+podAnnotations:
+  prometheus.io/scrape: "false"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 101  # nginx user
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

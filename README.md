@@ -112,6 +112,31 @@ Full SDK docs: [sdk/python/README.md](sdk/python/README.md) · [sdk/python/examp
 
 ---
 
+## Dashboard
+
+A read-only operator UI + HITL review interface ships at `web/dashboard/`.
+
+```bash
+cd web/dashboard
+npm install
+cp .env.example .env.local   # fill in VITE_AUTH0_DOMAIN and VITE_AUTH0_CLIENT_ID
+npm run dev                  # → http://localhost:5173 (proxies /v1 to :8080)
+```
+
+**Pages:** Categories · Category Detail · Jobs · Job Detail (live SSE) · Report Viewer (citations) · Reviews queue · Review Decision · Usage / Cost · Audit Log
+
+**Roles (via Auth0 JWT claim `https://trendstorm.ai/roles`):**
+
+| Role | Additional access |
+|---|---|
+| (any authenticated user) | Categories, Jobs, Usage |
+| `reviewer` | Reviews queue + decision form (approve / reject / refine) |
+| `admin` | Audit log + chunk raw links in citation panel |
+
+See [web/dashboard/README.md](web/dashboard/README.md) and [docs/architecture-history/phase-15a-dashboard.md](docs/architecture-history/phase-15a-dashboard.md).
+
+---
+
 ## Tech stack
 
 | Layer | Technology |
@@ -372,7 +397,8 @@ make logs | grep ollama-init
 | Resource | |
 |---|---|
 | [CLAUDE.md](CLAUDE.md) | Engineering context — all patterns, hard rules, architecture decisions |
-| [docs/architecture-history/](docs/architecture-history/) | Per-phase implementation summaries (Phases 1–12) |
+| [docs/architecture-history/](docs/architecture-history/) | Per-phase implementation summaries (Phases 1–15a) |
+| [web/dashboard/README.md](web/dashboard/README.md) | Dashboard dev quickstart, build, deploy |
 | [docs/adr/](docs/adr/) | Architecture Decision Records |
 | [ops/runbooks/](ops/runbooks/) | Operational runbooks for every Prometheus alert |
 | [ops/slo.yml](ops/slo.yml) | SLO definitions (13 objectives) |

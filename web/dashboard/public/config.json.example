@@ -1,0 +1,6 @@
+{
+  "apiBaseUrl": "https://api.trendstorm.ai",
+  "auth0Domain": "trendstorm.auth0.com",
+  "auth0ClientId": "REPLACE_ME",
+  "auth0Audience": "https://api.trendstorm.ai"
+}

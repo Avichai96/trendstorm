@@ -37,6 +37,15 @@
 - Phase 11+: `trendstorm-production-eval` (1% sample eval worker).
 - Phase 13.5+: `trendstorm-review-timeout` (polling sweeper, single replica Recreate).
 - Phase 14+: **Python SDK** at `sdk/python/` (PyPI: `trendstorm`); shared models at `packages/trendstorm-shared/` (PyPI: `trendstorm-shared`).
+- Phase 15a+: **Dashboard SPA** at `web/dashboard/` (Vite + React 18 + TypeScript); served static via nginx / S3+CloudFront. Separate Helm chart at `helm/dashboard/`. Not in the 10-service count — it is a CDN-served static artifact, not a running server process.
+
+### Frontend tech stack (Phase 15a+)
+- **Vite 5** bundler, **React 18** + **TypeScript strict**, **React Router 6**, **TanStack Query v5**.
+- **Auth0 React SDK** — OAuth2 universal login; custom JWT claims for roles and tenants.
+- **Tailwind v3** + **shadcn/ui** primitives (Radix-UI backed, full component ownership).
+- **Recharts** for cost charts; **react-markdown** + remark-gfm for report rendering.
+- **Custom SSE client** (`src/lib/sse.ts`) — fetch-based, supports `Authorization:` headers (native `EventSource` does not).
+- **Runtime config** — `config.json` served from CDN/ConfigMap (not build-time env vars) so the same image deploys to staging and production with different Auth0 clients.
 
 ### Directory layout
 ```
@@ -75,6 +84,23 @@ sdk/
   python/
     src/trendstorm_sdk/  async + sync client, SSE, retry, auth, errors (Phase 14)
     examples/            quickstart.py, hitl_reviewer.py, cost_dashboard.py
+web/
+  dashboard/             Vite SPA (Phase 15a)
+    src/api/             fetch client, TanStack Query options, generated types
+    src/auth/            AuthGuard, RoleGuard
+    src/components/ui/   shadcn/ui primitives
+    src/components/layout/  AppShell, Sidebar, TenantSelector
+    src/components/jobs/ PipelineProgress
+    src/components/reviews/ SlaCountdown, DecisionForm
+    src/components/reports/ MarkdownViewer, CitationPanel
+    src/hooks/           useSSE, useTenant
+    src/lib/             utils, sse (fetch-based SSE client)
+    src/pages/           Categories, CategoryDetail, Jobs, JobDetail, JobReport
+                         Reviews, ReviewDetail, Usage, AuditLog
+    tests/unit/          Vitest + RTL component tests + axe a11y
+    tests/e2e/           Playwright (login, jobs, reviews)
+helm/
+  dashboard/             Helm chart: nginx Deployment + ConfigMap + Ingress (Phase 15a)
     tests/unit/          SDK unit tests (respx mocks, no network)
     tests/integration/   SDK integration tests (live API required)
     docs/                MkDocs-material documentation site
@@ -84,7 +110,7 @@ sdk/
 
 ## 2. Current State of the System
 
-TrendStorm is production-ready through Phase 14. The full pipeline runs end-to-end with security hardening and human review gating, and a versioned Python SDK ships alongside the server:
+TrendStorm is production-ready through Phase 15a. The full pipeline runs end-to-end with security hardening and human review gating, a versioned Python SDK, and a live operator dashboard:
 POST /v1/jobs → orchestrator → scout (SSRF-validated) → knowledge (PII-redacted) → analyst (injection-contained) → [review gate: approve/reject/refine] → publisher (sanitized) → SSE delivery.
 
 ### Deployable services (10)
@@ -104,7 +130,7 @@ POST /v1/jobs → orchestrator → scout (SSRF-validated) → knowledge (PII-red
 
 ### Phase completion history
 
-All phases through 13.5 are complete. For detailed per-phase architecture decisions, see [docs/architecture-history/](docs/architecture-history/).
+All phases through 15a are complete. For detailed per-phase architecture decisions, see [docs/architecture-history/](docs/architecture-history/).
 
 | Phase | Title | Doc |
 |---|---|---|
@@ -123,6 +149,7 @@ All phases through 13.5 are complete. For detailed per-phase architecture decisi
 | 13 | Prompt injection defense & SSRF hardening | [phase-13](docs/architecture-history/phase-13-security-hardening.md) |
 | 13.5 | Human-in-the-loop review queue | [phase-13.5](docs/architecture-history/phase-13_5-hitl.md) |
 | 14 | Python SDK + shared models package | [phase-14](docs/architecture-history/phase-14-sdk.md) |
+| 15a | Dashboard SPA + HITL review UI | [phase-15a](docs/architecture-history/phase-15a-dashboard.md) |
 
 ### What works end-to-end
 
@@ -157,7 +184,13 @@ See [Section 3](#3-next-steps--pending-tasks) below.
 
 ## 3. Next Steps & Pending Tasks
 
-### Phase 15 (next — not started)
+### Phase 15a (complete)
+Dashboard SPA at `web/dashboard/` — Vite + React 18 + TypeScript strict, Auth0, TanStack Query v5, shadcn/ui, Recharts. Read-only views for categories, sources, jobs, reports, usage, audit log. HITL review queue with full decision form (approve / reject / request_refinement). Live SSE job progress via custom fetch-based client. Helm chart at `helm/dashboard/`.
+
+### Phase 15b (next — not started)
+Dashboard write paths: category/source creation, API key management UI. Auth0 Action setup wizard.
+
+### Phase 16 (not started)
 Multi-region deployment + data residency (ADR 001 trigger conditions), infrastructure-as-code (**Terraform**), Velero backups.
 
 ### Pending polish items
@@ -444,6 +477,24 @@ Multi-region deployment + data residency (ADR 001 trigger conditions), infrastru
 99. **`retry_request()` in `sdk/python/src/trendstorm_sdk/_retry.py` is a function, not a transport subclass.** It wraps a zero-argument coroutine so SSE streaming bypasses retry logic entirely. A transport-level retry would intercept streaming responses (status 200 with `text/event-stream`) and attempt to buffer/retry them, which corrupts the event stream. Never move retry to the transport layer.
 
 100. **SDK integration tests run only when `TRENDSTORM_API_KEY` is set; otherwise they skip.** `sdk/python/tests/integration/conftest.py` calls `pytest.skip()` if the env var is absent. Integration tests are not part of `make test` (server unit suite) — run via `make sdk-test-integration`. Staging-only tests are marked `@staging` and run only on main-branch CI.
+
+### Phase 15a — Dashboard conventions
+
+101. **Dashboard is a static SPA, not a service.** `web/dashboard/` produces a `dist/` artifact served by nginx (Helm chart `helm/dashboard/`) or S3+CloudFront. It does NOT appear in the 10-service count and does NOT get a Kafka consumer group or Mongo connection. Never add server-side logic to the dashboard — all data fetching is client-side via the REST API.
+
+102. **No business logic in React components. Use TanStack Query + custom hooks.** Components render data from query results. Query options factories live in `src/api/queries/<resource>.ts` and are the only place that calls `api.get/post`. Custom hooks in `src/hooks/` encapsulate stateful side effects (SSE connection, tenant selection). Never put `fetch()` calls directly in component bodies.
+
+103. **Type generation is committed and gated in CI.** `src/api/types.generated.ts` is the committed baseline from `npm run codegen` (which calls `openapi-typescript` against `/v1/openapi.json`). The CI job `codegen-check` re-runs codegen on every `main` push and fails if the committed file diverges. When adding a new API field: update the server, run `npm run codegen` in `web/dashboard/`, commit both together.
+
+104. **Auth0 roles come from `https://trendstorm.ai/roles` JWT claim, NOT from an API endpoint.** The `RoleGuard` and `useRoles()` hook read this claim from the Auth0 user object. Roles are injected by an Auth0 Action in the Post Login flow. Never create an `/api/me` endpoint for role-checking — that bypasses the Auth0 token and breaks the trust model.
+
+105. **SSE uses a custom fetch-based `SSEConnection` class, never `EventSource`.** Located at `src/lib/sse.ts`. Reason: `EventSource` does not support custom request headers (`Authorization:`, `X-Tenant-ID`). The `useSSE` hook (`src/hooks/useSSE.ts`) wraps `SSEConnection`, handles token refresh, persists `Last-Event-ID` to `sessionStorage`, and stops the connection on terminal events. Never use native `EventSource` for authenticated streams.
+
+106. **`config.json` is the source of truth at runtime; `VITE_*` env vars are dev fallbacks only.** `src/api/client.ts:loadConfig()` fetches `/config.json` first. In Kubernetes, this file is mounted from a ConfigMap (so the same Docker image runs in staging and prod). In local dev it 404s, and `loadConfig()` falls back to `import.meta.env.VITE_*`. Never bake Auth0 client IDs into the bundle — they belong in `config.json`.
+
+107. **Dashboard unit tests mock Auth0 globally in `tests/setup.ts`.** The mock injects a test user with `reviewer` and `admin` roles and a single tenant. Component tests never need a real Auth0 provider or HTTP server. E2E Playwright tests skip (via `test.skip()`) when `PLAYWRIGHT_AUTH_TOKEN` is absent — they only run against a live staging environment with a pre-seeded test user.
+
+108. **Tailwind design tokens are CSS custom properties in `src/index.css`, not hardcoded colors.** All `bg-*`, `text-*`, `border-*` classes in components use semantic names (`bg-primary`, `text-muted-foreground`). The CSS variables are defined in `:root`. Never use `bg-blue-600` etc. directly in component code — use semantic Tailwind classes so dark mode works by toggling the `.dark` class on `<html>`.
 
 ---
 

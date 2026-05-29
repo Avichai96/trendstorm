@@ -325,6 +325,50 @@ services:
 
 
   # ---------------------------------------------------------------------------
+  # Memory consolidation worker — episodic + semantic memory extraction
+  # ---------------------------------------------------------------------------
+  # Consumes memory.pending.v1: loads the completed Analysis + Category from
+  # Mongo, writes one episodic memory (idempotent), extracts up to N semantic
+  # memories via a haiku-class LLM call, persists all memories to Mongo +
+  # ChromaDB, and publishes memory.completed.v1.
+  # Memory failure is NON-BLOCKING — the orchestrator marks the job COMPLETED
+  # immediately after publishing; this worker enriches future analyses only.
+  # ---------------------------------------------------------------------------
+  memory-consolidation-worker:
+    build:
+      context: ..
+      dockerfile: docker/memory_consolidation.Dockerfile
+    image: trendstorm-memory-consolidation:local
+    restart: unless-stopped
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      chroma:
+        condition: service_healthy
+    environment:
+      APP__ENV: dev
+      APP__LOG_FORMAT: json
+      APP__LOG_LEVEL: INFO
+      MONGO__URI: "mongodb://root:rootpass@mongo:27017/?replicaSet=rs0&directConnection=true&authSource=admin"
+      KAFKA__BOOTSTRAP_SERVERS: "kafka:9092"
+      VECTOR__CHROMA_HOST: "chroma"
+      VECTOR__CHROMA_PORT: "8000"
+      LLM__DEFAULT_CHAT_PROVIDER: "anthropic"
+      LLM__DEFAULT_EMBEDDING_PROVIDER: "gemini"
+      LLM__ANTHROPIC_API_KEY: "${LLM__ANTHROPIC_API_KEY:-}"
+      LLM__OPENAI_API_KEY: "${LLM__OPENAI_API_KEY:-}"
+      GEMINI__API_KEY: "${GEMINI__API_KEY:-}"
+      MEMORY__MAX_SEMANTIC_MEMORIES_PER_JOB: "10"
+      MEMORY__SUPERSEDE_SIMILARITY_THRESHOLD: "0.92"
+      OTEL__EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL__SERVICE_NAME: "trendstorm-memory-consolidation"
+    networks:
+      - trendstorm
+
+
+  # ---------------------------------------------------------------------------
   # Outbox relay worker — polls Mongo outbox + publishes to Kafka
   # ---------------------------------------------------------------------------
   # Runs the OutboxRelay polling loop (500ms tick). Reads pending OutboxEntry

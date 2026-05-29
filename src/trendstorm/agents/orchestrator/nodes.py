@@ -38,6 +38,7 @@ from trendstorm.agents.state import (
     IngestionState,
     JobState,
     KnowledgeState,
+    MemoryConsolidationState,
     PublishingState,
     RetrievalState,
 )
@@ -47,6 +48,7 @@ from trendstorm.orchestration.events import (
     IngestPendingEvent,
     KnowledgeDocRef,
     KnowledgePendingEvent,
+    MemoryPendingEvent,
     PublishPendingEvent,
 )
 from trendstorm.orchestration.topics import Topic  # REVIEW_REQUESTED used inside review_gate_node
@@ -497,7 +499,7 @@ async def publish_node(state: JobState, config: RunnableConfig) -> dict[str, Any
             # Stage stays PUBLISHING; orchestrator worker injects results on resume.
             return {"attempts": {**state.attempts, Stage.PUBLISHING: attempt}}
 
-        # Stub: advance to COMPLETED without a real publisher.
+        # Stub: advance to MEMORY_CONSOLIDATION without a real publisher.
         await _maybe_fail(Stage.PUBLISHING)
         await asyncio.sleep(0.1)
         return {
@@ -506,7 +508,7 @@ async def publish_node(state: JobState, config: RunnableConfig) -> dict[str, Any
                 report_doc_id=new_id(),
                 report_blob_uri=f"s3://trendstorm-reports/{state.job_id}/report.md",
             ),
-            "stage": Stage.COMPLETED,
+            **_record_transition(state, Stage.MEMORY_CONSOLIDATION),
         }
 
 
@@ -634,6 +636,75 @@ async def review_gate_node(state: JobState, config: RunnableConfig) -> dict[str,
         return {
             "stage": Stage.AWAITING_REVIEW,
             "pending_review_id": review.id,
+        }
+
+
+# ===========================================================================
+# Node: memory_consolidation  — Phase 15.5: episodic + semantic memory write.
+# ===========================================================================
+
+async def memory_consolidation_node(state: JobState, config: RunnableConfig) -> dict[str, Any]:
+    """Publish MemoryPendingEvent for the memory-consolidation worker.
+
+    Dual-mode (same pattern as all other handoff nodes):
+        Production (kafka_producer present): publish MemoryPendingEvent and
+            return partial state — graph pauses via interrupt_after=[NODE_MEMORY_CONSOLIDATION].
+        Stub (no producer): advance to COMPLETED directly (tests skip memory I/O).
+
+    Memory failure is non-blocking: if the budget is exhausted, after_memory_consolidation
+    routes to NODE_END (COMPLETED) regardless. The report is already published.
+    """
+    attempt = _increment_attempt(state, Stage.MEMORY_CONSOLIDATION)
+    with tracer.start_as_current_span(
+        "orchestrator.memory_consolidation",
+        attributes={"trendstorm.attempt": attempt, "trendstorm.job_id": state.job_id},
+    ):
+        logger.info("node_memory_consolidation", job_id=state.job_id, attempt=attempt)
+
+        kafka_producer = config.get("configurable", {}).get("kafka_producer")
+
+        if kafka_producer is not None:
+            from opentelemetry.propagate import inject  # deferred
+
+            otel_carrier: dict[str, str] = {}
+            inject(otel_carrier)
+            analysis_id = state.analysis.insights_doc_id or ""
+            report_id = state.publishing.report_doc_id
+            event = MemoryPendingEvent(
+                correlation_id=state.observability.correlation_id,
+                tenant_id=state.tenant_id,
+                traceparent=otel_carrier.get("traceparent"),
+                job_id=state.job_id,
+                analysis_id=analysis_id,
+                category_id=state.category_id,
+                report_id=report_id,
+                attempt=attempt,
+            )
+            await kafka_producer.send_and_wait(
+                Topic.MEMORY_PENDING.value,
+                value=event.model_dump_json().encode(),
+                key=state.job_id.encode(),
+            )
+            logger.info(
+                "memory_pending_published",
+                job_id=state.job_id,
+                analysis_id=analysis_id,
+            )
+            # Stage stays MEMORY_CONSOLIDATION; orchestrator worker injects results.
+            return {
+                "attempts": {**state.attempts, Stage.MEMORY_CONSOLIDATION: attempt},
+                **_record_transition(state, Stage.MEMORY_CONSOLIDATION),
+            }
+
+        # Stub: advance to COMPLETED without real memory I/O.
+        await asyncio.sleep(0.05)
+        return {
+            "attempts": {**state.attempts, Stage.MEMORY_CONSOLIDATION: attempt},
+            "memory": MemoryConsolidationState(
+                episodic_memory_id=new_id(),
+                semantic_memory_ids=[],
+            ),
+            "stage": Stage.COMPLETED,
         }
 
 

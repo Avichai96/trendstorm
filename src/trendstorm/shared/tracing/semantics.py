@@ -125,3 +125,14 @@ class Attr:
     SECURITY_PII_COUNT = "trendstorm.security.pii_count"
     SECURITY_AUDIT_EVENT_TYPE = "trendstorm.security.audit_event_type"
     SECURITY_REDIRECT_HOP = "trendstorm.security.redirect_hop"
+
+    # ------------------------------------------------------------------ #
+    # Long-term memory (Phase 15.5)
+    # ------------------------------------------------------------------ #
+    MEMORY_ID = "trendstorm.memory_id"
+    MEMORY_KIND = "trendstorm.memory_kind"           # "semantic" | "episodic"
+    MEMORY_CONFIDENCE = "trendstorm.memory_confidence"
+    MEMORY_SUPERSEDED_BY = "trendstorm.memory_superseded_by"
+    MEMORY_COLLECTION = "trendstorm.memory_collection"   # ChromaDB collection name
+    MEMORY_HITS = "trendstorm.memory_hits"           # count returned by retriever
+    MEMORY_WRITE_COUNT = "trendstorm.memory_write_count"  # count written per job

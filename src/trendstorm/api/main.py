@@ -54,6 +54,7 @@ from trendstorm.api.routers import health as health_router
 from trendstorm.api.routers import jobs as jobs_router
 from trendstorm.api.routers import metrics as metrics_router
 from trendstorm.api.routers import quota as quota_router
+from trendstorm.api.routers import memories as memories_router
 from trendstorm.api.routers import reviews as reviews_router
 from trendstorm.api.routers import sources as sources_router
 from trendstorm.infrastructure.blob.minio_client import MinioClient
@@ -260,6 +261,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(api_keys_router.router)
     app.include_router(quota_router.router)
     app.include_router(reviews_router.router)
+    app.include_router(memories_router.router)
 
     # ---- Exception handlers ----------------------------------------------
     install_exception_handlers(app)

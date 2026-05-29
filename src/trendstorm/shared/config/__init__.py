@@ -401,6 +401,28 @@ class HitlSettings(BaseSettings):
     sweeper_interval_seconds: int = Field(default=60, ge=10, le=3600)
 
 
+class MemorySettings(BaseSettings):
+    """Long-term memory settings — episodic + semantic memory consolidation.
+
+    episodic_ttl_days: How long episodic memories are retained in Mongo (TTL index).
+    semantic_ttl_days: How long semantic memories are retained in Mongo (TTL index).
+        Both default to 730 days (2 years); ChromaDB vectors are deleted on supersede.
+    supersede_similarity_threshold: Cosine similarity above which an existing memory
+        is considered equivalent and marked superseded_by the new one. 0.92 is tight
+        enough to avoid over-suppression while still preventing near-duplicate memories.
+    max_semantic_memories_per_job: Cap on LLM-extracted memories per analysis run.
+        Drives the `record_memories` tool schema max-items constraint.
+    memory_final_k: Number of retrieved memories injected into the analyst context.
+        Set lower than analysis.final_k — memories augment, chunks are the primary source.
+    """
+
+    episodic_ttl_days: int = Field(default=730, ge=1)
+    semantic_ttl_days: int = Field(default=730, ge=1)
+    supersede_similarity_threshold: float = Field(default=0.92, ge=0.0, le=1.0)
+    max_semantic_memories_per_job: int = Field(default=10, ge=1, le=50)
+    memory_final_k: int = Field(default=5, ge=1, le=20)
+
+
 # ---------------------------------------------------------------------------
 # Root settings — composes all subsystems
 # ---------------------------------------------------------------------------
@@ -441,6 +463,7 @@ class Settings(BaseSettings):
     sse: SSESettings = Field(default_factory=SSESettings)
     auth: AuthSettings = Field(default_factory=AuthSettings)
     hitl: HitlSettings = Field(default_factory=HitlSettings)
+    memory: MemorySettings = Field(default_factory=MemorySettings)
 
     @classmethod
     def settings_customise_sources(

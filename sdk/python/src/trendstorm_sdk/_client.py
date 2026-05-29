@@ -26,6 +26,7 @@ from ._retry import retry_request
 from .resources.api_keys import ApiKeysResource
 from .resources.categories import CategoriesResource
 from .resources.jobs import JobsResource
+from .resources.memories import MemoriesResource
 from .resources.quota import QuotaResource
 from .resources.reviews import ReviewsResource
 from .resources.sources import SourcesResource
@@ -94,6 +95,7 @@ class TrendStormClient:
         self._sources = SourcesResource(self)
         self._jobs = JobsResource(self)
         self._reviews = ReviewsResource(self)
+        self._memories = MemoriesResource(self)
         self._quota = QuotaResource(self)
         self._api_keys = ApiKeysResource(self)
 
@@ -125,6 +127,10 @@ class TrendStormClient:
     @property
     def reviews(self) -> ReviewsResource:
         return self._reviews
+
+    @property
+    def memories(self) -> MemoriesResource:
+        return self._memories
 
     @property
     def quota(self) -> QuotaResource:

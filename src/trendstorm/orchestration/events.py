@@ -284,6 +284,40 @@ class StreamPartialEvent(EventEnvelope):
     )
 
 
+class MemoryPendingEvent(EventEnvelope):
+    """Topic: trendstorm.memory.pending.v1.
+
+    Published by the orchestrator's memory_consolidation_node after publishing
+    completes. The memory-consolidation worker processes episodic + semantic
+    memory extraction and persists results.
+    """
+
+    event_type: Literal["memory.pending"] = "memory.pending"
+    job_id: str
+    analysis_id: str
+    category_id: str
+    report_id: str | None = None   # markdown report ID for episodic summary source
+    attempt: int = 1
+
+
+class MemoryCompletedEvent(EventEnvelope):
+    """Topic: trendstorm.memory.completed.v1.
+
+    Published by the memory-consolidation worker on success or failure. The
+    orchestrator resumes the graph to COMPLETED on receipt. On catastrophic
+    failure, success=False and the orchestrator may advance to COMPLETED
+    anyway (memory failure is non-blocking — graceful degradation).
+    """
+
+    event_type: Literal["memory.completed"] = "memory.completed"
+    job_id: str
+    success: bool
+    episodic_memory_id: str | None = None      # ULID of the episodic Memory doc
+    semantic_memory_ids: list[str] = []         # ULIDs of semantic Memory docs
+    error_code: str | None = None
+    error_message: str | None = None
+
+
 class ReviewRequestedEvent(EventEnvelope):
     """Topic: trendstorm.review.requested.v1.
 
@@ -337,6 +371,7 @@ AnyEvent = Annotated[
     | PublishPendingEvent | PublishCompletedEvent
     | StreamPartialEvent
     | EvalSampleEvent
-    | ReviewRequestedEvent | ReviewResolvedEvent,
+    | ReviewRequestedEvent | ReviewResolvedEvent
+    | MemoryPendingEvent | MemoryCompletedEvent,
     Field(discriminator="event_type"),
 ]

@@ -28,6 +28,7 @@ from trendstorm.agents.orchestrator.edges import (
     NODE_FAIL,
     NODE_INGEST,
     NODE_INIT,
+    NODE_MEMORY_CONSOLIDATION,
     NODE_PUBLISH,
     NODE_REFINE,
     NODE_RETRIEVE,
@@ -68,6 +69,7 @@ def build_orchestrator_graph(
     g.add_node(NODE_REFINE, graph_nodes.refine_node)
     g.add_node(NODE_REVIEW_GATE, graph_nodes.review_gate_node)
     g.add_node(NODE_PUBLISH, graph_nodes.publish_node)
+    g.add_node(NODE_MEMORY_CONSOLIDATION, graph_nodes.memory_consolidation_node)
     g.add_node(NODE_FAIL, graph_nodes.fail_node)
 
     # ----- Entry point --------------------------------------------------
@@ -115,7 +117,20 @@ def build_orchestrator_graph(
     g.add_conditional_edges(
         NODE_PUBLISH,
         edges.after_publish,
-        {END: END, NODE_PUBLISH: NODE_PUBLISH, NODE_FAIL: NODE_FAIL},
+        {
+            NODE_MEMORY_CONSOLIDATION: NODE_MEMORY_CONSOLIDATION,
+            NODE_PUBLISH: NODE_PUBLISH,
+            NODE_FAIL: NODE_FAIL,
+        },
+    )
+    g.add_conditional_edges(
+        NODE_MEMORY_CONSOLIDATION,
+        edges.after_memory_consolidation,
+        {
+            END: END,
+            NODE_MEMORY_CONSOLIDATION: NODE_MEMORY_CONSOLIDATION,
+            NODE_FAIL: NODE_FAIL,
+        },
     )
 
     return g.compile(checkpointer=checkpointer)

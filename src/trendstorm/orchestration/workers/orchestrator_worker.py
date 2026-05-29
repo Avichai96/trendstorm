@@ -46,6 +46,7 @@ from trendstorm.agents.orchestrator.edges import (
     NODE_ANALYZE,
     NODE_EMBED,
     NODE_INGEST,
+    NODE_MEMORY_CONSOLIDATION,
     NODE_PUBLISH,
 )
 from trendstorm.agents.orchestrator.graph import build_orchestrator_graph
@@ -57,6 +58,7 @@ from trendstorm.agents.state import (
     IngestionState,
     JobState,
     KnowledgeState,
+    MemoryConsolidationState,
     PublishingState,
     SourceRef,
 )
@@ -76,6 +78,7 @@ from trendstorm.orchestration.events import (
     IngestCompletedEvent,
     JobRequestedEvent,
     KnowledgeCompletedEvent,
+    MemoryCompletedEvent,
     PublishCompletedEvent,
     ReviewResolvedEvent,
 )
@@ -113,6 +116,7 @@ _STAGE_TO_STATUS: dict[Stage, JobStatus] = {
     Stage.ANALYZING: JobStatus.ANALYZING,
     Stage.AWAITING_REVIEW: JobStatus.AWAITING_REVIEW,
     Stage.PUBLISHING: JobStatus.PUBLISHING,
+    Stage.MEMORY_CONSOLIDATION: JobStatus.PUBLISHING,  # user-visible as "publishing" (internal detail)
     Stage.COMPLETED: JobStatus.COMPLETED,
     Stage.FAILED: JobStatus.FAILED,
     Stage.CANCELLED: JobStatus.CANCELLED,
@@ -143,6 +147,7 @@ class OrchestratorWorker(BaseConsumer):
                 Topic.ANALYSIS_COMPLETED,
                 Topic.PUBLISH_COMPLETED,
                 Topic.REVIEW_RESOLVED,
+                Topic.MEMORY_COMPLETED,
             ],
             group_id=ConsumerGroup.ORCHESTRATOR.value,
             settings=settings,
@@ -177,6 +182,8 @@ class OrchestratorWorker(BaseConsumer):
             await self._handle_publish_completed(event)
         elif isinstance(event, ReviewResolvedEvent):
             await self._handle_review_resolved(event)
+        elif isinstance(event, MemoryCompletedEvent):
+            await self._handle_memory_completed(event)
         else:
             logger.warning(
                 "orchestrator_unexpected_event",
@@ -784,7 +791,9 @@ class OrchestratorWorker(BaseConsumer):
     async def _handle_publish_completed(self, event: PublishCompletedEvent) -> None:
         """Resume the graph after the publisher worker finishes rendering.
 
-        On success: inject PublishingState + COMPLETED → resume → after_publish → END.
+        On success: inject PublishingState + MEMORY_CONSOLIDATION →
+            resume with interrupt_after=[NODE_MEMORY_CONSOLIDATION] →
+            memory_consolidation_node publishes MemoryPendingEvent → graph pauses.
         On failure: update job status to FAILED.
         """
         config: RunnableConfig = {"configurable": {"thread_id": event.job_id}}
@@ -816,7 +825,7 @@ class OrchestratorWorker(BaseConsumer):
             )
             return
 
-        # Inject the report IDs as PublishingState; advance to COMPLETED.
+        # Inject the report IDs as PublishingState; advance to MEMORY_CONSOLIDATION.
         report_uri = (
             f"s3://trendstorm-reports/{event.job_id}"
             f"/{event.markdown_report_id}/report.md"
@@ -825,7 +834,7 @@ class OrchestratorWorker(BaseConsumer):
         await self._graph.aupdate_state(
             config,
             {
-                "stage": Stage.COMPLETED,
+                "stage": Stage.MEMORY_CONSOLIDATION,
                 "publishing": PublishingState(
                     report_doc_id=event.markdown_report_id or "",
                     report_blob_uri=report_uri,
@@ -834,7 +843,72 @@ class OrchestratorWorker(BaseConsumer):
             as_node=NODE_PUBLISH,
         )
 
-        # Resume — after_publish sees report_doc_id → END.
+        # Resume — after_publish sees report_doc_id → NODE_MEMORY_CONSOLIDATION.
+        # memory_consolidation_node publishes MemoryPendingEvent and pauses.
+        kafka_config: dict[str, Any] = {}
+        if hasattr(self, "_producer"):
+            kafka_config["kafka_producer"] = self._producer
+        mem_config: RunnableConfig = {"configurable": {"thread_id": event.job_id, **kafka_config}}
+
+        try:
+            async for step in self._graph.astream(
+                None,
+                config=mem_config,
+                interrupt_after=[NODE_MEMORY_CONSOLIDATION],
+            ):
+                for node_name, _update in step.items():
+                    if node_name == "__interrupt__":
+                        continue
+                    logger.info("graph_step", job_id=event.job_id, node=node_name)
+        except Exception:
+            logger.exception("graph_resume_failed_after_publish", job_id=event.job_id)
+            await self._jobs.update_status(
+                event.tenant_id, event.job_id, JobStatus.FAILED,
+                failure_code="graph_resume_error",
+                failure_message="Graph resume failed after publish completed",
+            )
+            raise
+
+        logger.info(
+            "publish_completed_memory_pending",
+            job_id=event.job_id,
+            markdown_report_id=event.markdown_report_id,
+        )
+
+    async def _handle_memory_completed(self, event: MemoryCompletedEvent) -> None:
+        """Resume the graph after the memory-consolidation worker finishes.
+
+        On success or partial-failure: inject MemoryConsolidationState + COMPLETED
+            → resume → after_memory_consolidation → END.
+        Memory failure is non-blocking — job reaches COMPLETED regardless.
+        """
+        config: RunnableConfig = {"configurable": {"thread_id": event.job_id}}
+
+        snapshot = await self._graph.aget_state(config)
+        if not snapshot.values:
+            logger.warning("no_checkpoint_for_job_memory", job_id=event.job_id)
+            return
+        current = JobState.model_validate(snapshot.values)
+        if current.stage.is_terminal:
+            logger.info(
+                "job_already_terminal_memory",
+                job_id=event.job_id,
+                stage=current.stage.value,
+            )
+            return
+
+        await self._graph.aupdate_state(
+            config,
+            {
+                "stage": Stage.COMPLETED,
+                "memory": MemoryConsolidationState(
+                    episodic_memory_id=event.episodic_memory_id,
+                    semantic_memory_ids=event.semantic_memory_ids,
+                ),
+            },
+            as_node=NODE_MEMORY_CONSOLIDATION,
+        )
+
         final_state: JobState | None = None
         try:
             async for step in self._graph.astream(None, config=config):
@@ -846,16 +920,16 @@ class OrchestratorWorker(BaseConsumer):
             snapshot = await self._graph.aget_state(config)
             final_state = JobState.model_validate(snapshot.values)
         except Exception:
-            logger.exception("graph_resume_failed_after_publish", job_id=event.job_id)
+            logger.exception("graph_resume_failed_after_memory", job_id=event.job_id)
             await self._jobs.update_status(
                 event.tenant_id, event.job_id, JobStatus.FAILED,
-                failure_code="graph_resume_error",
-                failure_message="Graph resume failed after publish completed",
+                failure_code="graph_resume_error_memory",
+                failure_message="Graph resume failed after memory consolidation",
             )
             raise
 
         if final_state:
-            new_status = _STAGE_TO_STATUS.get(final_state.stage, JobStatus.FAILED)
+            new_status = _STAGE_TO_STATUS.get(final_state.stage, JobStatus.COMPLETED)
             await self._jobs.update_status(
                 event.tenant_id, event.job_id, new_status,
                 failure_code=None if new_status != JobStatus.FAILED else "graph_failed",
@@ -865,11 +939,12 @@ class OrchestratorWorker(BaseConsumer):
                 ),
             )
             logger.info(
-                "job_completed",
+                "job_completed_with_memory",
                 job_id=event.job_id,
                 stage=final_state.stage.value,
                 status=new_status.value,
-                markdown_report_id=event.markdown_report_id,
+                episodic_memory_id=event.episodic_memory_id,
+                n_semantic_memories=len(event.semantic_memory_ids),
             )
 
 

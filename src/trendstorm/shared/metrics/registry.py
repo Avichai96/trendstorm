@@ -111,6 +111,12 @@ class ContentTypeLabel(StrEnum):
     OTHER = "other"
 
 
+class MemoryKindLabel(StrEnum):
+    """Memory kind label values — bounded by enum for cardinality safety."""
+    SEMANTIC = "semantic"
+    EPISODIC = "episodic"
+
+
 class SecurityBlockReason(StrEnum):
     """Bounded set of SSRF/security block reasons used as Prometheus label values.
 
@@ -797,6 +803,77 @@ class _TrendStormMetrics:
                 "trendstorm_reviews_pending_oldest_created_at",
                 "Unix timestamp of the oldest pending HITL review per tenant bucket.",
                 labelnames=["tenant_id_hash"],
+            )
+        )
+
+        # ------------------------------------------------------------------ #
+        # Long-term memory metrics (Phase 15.5)
+        # ------------------------------------------------------------------ #
+        _check_labels("memory_writes_total", ("tenant_id", "kind", "status"))
+        self.memory_writes = (
+            Counter(
+                "trendstorm_memory_writes_total",
+                "Total memory records written by kind and outcome.",
+                labelnames=["tenant_id", "kind", "status"],
+                registry=registry,
+            )
+            if registry is not None
+            else Counter(
+                "trendstorm_memory_writes_total",
+                "Total memory records written by kind and outcome.",
+                labelnames=["tenant_id", "kind", "status"],
+            )
+        )
+
+        _check_labels("memory_retrieval_hits", ("tenant_id", "kind"))
+        self.memory_retrieval_hits = (
+            Histogram(
+                "trendstorm_memory_retrieval_hits",
+                "Number of memories returned per retrieval call by kind.",
+                labelnames=["tenant_id", "kind"],
+                buckets=(0, 1, 2, 3, 5, 8, 10, 15, 20),
+                registry=registry,
+            )
+            if registry is not None
+            else Histogram(
+                "trendstorm_memory_retrieval_hits",
+                "Number of memories returned per retrieval call by kind.",
+                labelnames=["tenant_id", "kind"],
+                buckets=(0, 1, 2, 3, 5, 8, 10, 15, 20),
+            )
+        )
+
+        _check_labels("memory_consolidation_duration_seconds", ("tenant_id", "status"))
+        self.memory_consolidation_duration = (
+            Histogram(
+                "trendstorm_memory_consolidation_duration_seconds",
+                "Time to extract and persist memories for one job.",
+                labelnames=["tenant_id", "status"],
+                buckets=_MEDIUM_BUCKETS,
+                registry=registry,
+            )
+            if registry is not None
+            else Histogram(
+                "trendstorm_memory_consolidation_duration_seconds",
+                "Time to extract and persist memories for one job.",
+                labelnames=["tenant_id", "status"],
+                buckets=_MEDIUM_BUCKETS,
+            )
+        )
+
+        _check_labels("memories_active", ("tenant_id_hash", "kind"))
+        self.memories_active = (
+            Gauge(
+                "trendstorm_memories_active",
+                "Approximate count of active (non-superseded) memories per tenant bucket and kind.",
+                labelnames=["tenant_id_hash", "kind"],
+                registry=registry,
+            )
+            if registry is not None
+            else Gauge(
+                "trendstorm_memories_active",
+                "Approximate count of active (non-superseded) memories per tenant bucket and kind.",
+                labelnames=["tenant_id_hash", "kind"],
             )
         )
 

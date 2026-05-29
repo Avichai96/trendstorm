@@ -11,15 +11,16 @@ Why a Stage enum separate from JobStatus?
     - This separation lets us refactor internals without breaking the API.
 
 Transition rules
-    PENDING         -> INGESTING
-    INGESTING       -> EMBEDDING | FAILED
-    EMBEDDING       -> RETRIEVING | FAILED
-    RETRIEVING      -> ANALYZING | FAILED
-    ANALYZING       -> AWAITING_REVIEW | PUBLISHING | RETRIEVING (refinement) | FAILED
-    AWAITING_REVIEW -> ANALYZING (refinement requested) | PUBLISHING (approved) | REJECTED (rejected/timeout)
-    PUBLISHING      -> COMPLETED | FAILED
-    REJECTED        is terminal (human reviewer rejected the analysis)
-    Any             -> CANCELLED (user-initiated)
+    PENDING                -> INGESTING
+    INGESTING              -> EMBEDDING | FAILED
+    EMBEDDING              -> RETRIEVING | FAILED
+    RETRIEVING             -> ANALYZING | FAILED
+    ANALYZING              -> AWAITING_REVIEW | PUBLISHING | RETRIEVING (refinement) | FAILED
+    AWAITING_REVIEW        -> ANALYZING (refinement requested) | PUBLISHING (approved) | REJECTED (rejected/timeout)
+    PUBLISHING             -> MEMORY_CONSOLIDATION | FAILED
+    MEMORY_CONSOLIDATION   -> COMPLETED | FAILED (Phase 15.5: episodic + semantic memory write)
+    REJECTED               is terminal (human reviewer rejected the analysis)
+    Any                    -> CANCELLED (user-initiated)
 
 These are enforced in `is_valid_transition` so bugs in node code surface fast.
 """
@@ -38,6 +39,7 @@ class Stage(StrEnum):
     ANALYZING = "analyzing"
     AWAITING_REVIEW = "awaiting_review"   # HITL: paused for human decision
     PUBLISHING = "publishing"
+    MEMORY_CONSOLIDATION = "memory_consolidation"   # Phase 15.5: persist episodic + semantic memories
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
@@ -65,7 +67,10 @@ _TRANSITIONS: dict[Stage, frozenset[Stage]] = {
     Stage.AWAITING_REVIEW: frozenset({
         Stage.ANALYZING, Stage.PUBLISHING, Stage.REJECTED, Stage.CANCELLED,
     }),
-    Stage.PUBLISHING: frozenset({Stage.PUBLISHING, Stage.COMPLETED, Stage.FAILED, Stage.CANCELLED}),
+    Stage.PUBLISHING: frozenset({Stage.PUBLISHING, Stage.MEMORY_CONSOLIDATION, Stage.FAILED, Stage.CANCELLED}),
+    Stage.MEMORY_CONSOLIDATION: frozenset({
+        Stage.MEMORY_CONSOLIDATION, Stage.COMPLETED, Stage.FAILED, Stage.CANCELLED,
+    }),
     Stage.COMPLETED:  frozenset(),
     Stage.FAILED:     frozenset(),
     Stage.CANCELLED:  frozenset(),

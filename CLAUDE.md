@@ -110,10 +110,10 @@ helm/
 
 ## 2. Current State of the System
 
-TrendStorm is production-ready through Phase 15a. The full pipeline runs end-to-end with security hardening and human review gating, a versioned Python SDK, and a live operator dashboard:
-POST /v1/jobs → orchestrator → scout (SSRF-validated) → knowledge (PII-redacted) → analyst (injection-contained) → [review gate: approve/reject/refine] → publisher (sanitized) → SSE delivery.
+TrendStorm is production-ready through Phase 15.5. The full pipeline runs end-to-end with security hardening, human review gating, a versioned Python SDK, a live operator dashboard, and long-term episodic + semantic memory:
+POST /v1/jobs → orchestrator → scout (SSRF-validated) → knowledge (PII-redacted) → analyst (injection-contained, memory-augmented) → [review gate: approve/reject/refine] → publisher (sanitized) → memory consolidation → SSE delivery.
 
-### Deployable services (10)
+### Deployable services (11)
 
 | Service | Purpose | Scaling signal |
 |---|---|---|
@@ -121,16 +121,17 @@ POST /v1/jobs → orchestrator → scout (SSRF-validated) → knowledge (PII-red
 | orchestrator-worker | LangGraph state machine | Kafka lag |
 | scout-worker | Source fetching + parsing | Kafka lag |
 | knowledge-worker | Chunking + embedding | Kafka lag |
-| analyst-worker | Hybrid RAG + LLM analysis | Kafka lag |
+| analyst-worker | Hybrid RAG + LLM analysis + memory retrieval | Kafka lag |
 | publisher-worker | Markdown/PDF/JSON rendering | Kafka lag |
 | sse-coordinator-worker | Kafka → Redis Streams fanout | Kafka lag |
 | production-eval-worker | 1% production sample eval | Kafka lag |
 | outbox-relay-worker | Mongo outbox → Kafka | 1-2 replicas (Recreate) |
 | review-timeout-worker | Auto-expire pending reviews past SLA | N/A (single replica Recreate) |
+| memory-consolidation-worker | Episodic + semantic memory extraction | Kafka lag |
 
 ### Phase completion history
 
-All phases through 15a are complete. For detailed per-phase architecture decisions, see [docs/architecture-history/](docs/architecture-history/).
+All phases through 15.5 are complete. For detailed per-phase architecture decisions, see [docs/architecture-history/](docs/architecture-history/).
 
 | Phase | Title | Doc |
 |---|---|---|
@@ -150,15 +151,16 @@ All phases through 15a are complete. For detailed per-phase architecture decisio
 | 13.5 | Human-in-the-loop review queue | [phase-13.5](docs/architecture-history/phase-13_5-hitl.md) |
 | 14 | Python SDK + shared models package | [phase-14](docs/architecture-history/phase-14-sdk.md) |
 | 15a | Dashboard SPA + HITL review UI | [phase-15a](docs/architecture-history/phase-15a-dashboard.md) |
+| 15.5 | Long-term memory (episodic + semantic) | [phase-15.5](docs/architecture-history/phase-15_5-long-term-memory.md) |
 
 ### What works end-to-end
 
 - `make up` → infra (Mongo replica set, Kafka KRaft, Redis, ChromaDB, MinIO, Ollama)
-- `make seed-indexes` → all Mongo indexes (idempotent, includes `audit_log` and `url_blocklists`)
+- `make seed-indexes` → all Mongo indexes (idempotent, includes `audit_log`, `url_blocklists`, `memories`)
 - `make up-obs` → OTel Collector, Jaeger, Prometheus, Loki, Grafana (trendstorm-overview dashboard)
-- `make up-app` → api + all 10 workers (each exposes `/metrics` on port 9090)
+- `make up-app` → api + all 11 workers (each exposes `/metrics` on port 9090)
 - Full distributed trace via OTel, Prometheus metrics per stage, structured logs via Loki
-- Test suites: `tests/unit/` (1046 tests, no Docker); `tests/integration/` exercises real infra; `sdk/python/tests/unit/` SDK unit tests (respx mocks)
+- Test suites: `tests/unit/` (1116 tests, no Docker); `tests/integration/` exercises real infra; `sdk/python/tests/unit/` SDK unit tests (respx mocks)
 - SSRF validation on every Scout URL (initial + each redirect hop, max 3 hops)
 - Global blocklist loaded from `ops/security/global-blocklist.txt`; per-tenant blocklist in `url_blocklists` collection
 - Chunk content wrapped in `<chunk>` tags with explicit data/instruction boundary rules in analyst prompt
@@ -171,6 +173,7 @@ All phases through 15a are complete. For detailed per-phase architecture decisio
 - HITL review queue: per-tenant modes (off/always/flagged_only), 48h SLA with auto-reject sweeper, reviewer role on API keys, atomic Mongo transaction for resolve via outbox pattern
 - `Stage.AWAITING_REVIEW` and `Stage.REJECTED` (terminal, distinct from FAILED); `skip_hitl_gate` guard on JobState prevents re-gating after review resolution
 - `/v1/reviews` API (list, get, resolve) gated by `require_role("reviewer")`; `PendingReviewsAgingHigh` alert fires at 80% of SLA
+- Long-term memory: `memory-consolidation-worker` extracts episodic + semantic memories post-publish; `MemoryRetriever` injects top-5 relevant memories into each Analyst context as `<memory>` tags; supersede detection via cosine similarity ≥ 0.92; user-curated memories via `/v1/categories/{id}/memories` (tenant_admin role); `scripts/backfill_memories.py` for existing analyses
 
 ### Architecture Decision Records
 
@@ -187,6 +190,9 @@ See [Section 3](#3-next-steps--pending-tasks) below.
 ### Phase 15a (complete)
 Dashboard SPA at `web/dashboard/` — Vite + React 18 + TypeScript strict, Auth0, TanStack Query v5, shadcn/ui, Recharts. Read-only views for categories, sources, jobs, reports, usage, audit log. HITL review queue with full decision form (approve / reject / request_refinement). Live SSE job progress via custom fetch-based client. Helm chart at `helm/dashboard/`.
 
+### Phase 15.5 (complete)
+Long-term memory at `src/trendstorm/domain/memories/`, `src/trendstorm/services/memory/`, `src/trendstorm/infrastructure/vectors/chroma_memory_store.py`. Pipeline: PUBLISHING → MEMORY_CONSOLIDATION → COMPLETED. Memory failure is non-blocking — the orchestrator marks COMPLETED regardless. Analyst retrieves top-5 relevant memories via `MemoryRetriever` in parallel with `HybridRetriever`. Supersede detection uses cosine similarity ≥ 0.92 (no LLM). User-curated memories via `/v1/categories/{id}/memories` (tenant_admin). SDK `ts.memories`. Backfill via `scripts/backfill_memories.py`. 1116 unit tests passing.
+
 ### Phase 15b (next — not started)
 Dashboard write paths: category/source creation, API key management UI. Auth0 Action setup wizard.
 
@@ -197,13 +203,14 @@ Multi-region deployment + data residency (ADR 001 trigger conditions), infrastru
 - **RetryingChatProvider**: `RetryingEmbeddingProvider` covers embeddings; consider an equivalent wrapper for transient errors on the Analyst hot path (separate from Kafka-level retry which is too coarse for multi-step LLM flows). Runbook [llm-rate-limit.md](ops/runbooks/llm-rate-limit.md) calls this out as prevention.
 - **Kafka consumer lag metric**: `BaseConsumer` does not yet update `METRICS.kafka_consumer_lag` gauge — each worker needs to call it on every poll cycle with its current lag.
 - **ChromaDB health gauge**: `trendstorm_vector_store_health` is only set at startup. Workers that use ChromaDB should refresh it on a 30s interval via a background task.
-- **`publish_node` stage transition**: bypasses `_record_transition` for `PUBLISHING → COMPLETED` — route through the helper for consistency.
 - **Apply `require_tenant` to jobs + sources routers**: Phase 5 only applied the OpenAPI documentation dependency to categories.
 - **`frozen=True`** on remaining nested Settings models for consistency.
 - **`test_create_job_drives_to_completed`** remains skipped — orchestrator-only fixture can't drive to COMPLETED without all workers; `test_full_pipeline_with_sse.py` is now the canonical full-stack regression.
 - **`scripts/smoke_test.py`** Mongo session test has Motor API drift (`TypeError: object AsyncClientSession can't be used in 'await' expression`). Fix when next touching the smoke script.
 - **Token-by-token streaming from the Analyst**: the Analyst uses `complete_with_tools` (atomic). Future: switch to `chat.stream()` and forward deltas as `CHUNK_DELTA` stream events during generation, not just after.
 - **`$merge` rollups**: `jobs_daily_stats` Mongo aggregation — pre-aggregation for heavy dashboard queries.
+- **Memory dashboard tile**: add memory count by kind to the dashboard usage page (`GET /v1/categories/{id}/memories` already exists; just needs a UI widget).
+- **Integration test for memory pipeline**: `test_full_pipeline_with_sse.py` should assert that a `MemoryCompletedEvent` is received after job completion (requires `make up` + all workers running).
 
 ---
 
@@ -495,6 +502,22 @@ Multi-region deployment + data residency (ADR 001 trigger conditions), infrastru
 107. **Dashboard unit tests mock Auth0 globally in `tests/setup.ts`.** The mock injects a test user with `reviewer` and `admin` roles and a single tenant. Component tests never need a real Auth0 provider or HTTP server. E2E Playwright tests skip (via `test.skip()`) when `PLAYWRIGHT_AUTH_TOKEN` is absent — they only run against a live staging environment with a pre-seeded test user.
 
 108. **Tailwind design tokens are CSS custom properties in `src/index.css`, not hardcoded colors.** All `bg-*`, `text-*`, `border-*` classes in components use semantic names (`bg-primary`, `text-muted-foreground`). The CSS variables are defined in `:root`. Never use `bg-blue-600` etc. directly in component code — use semantic Tailwind classes so dark mode works by toggling the `.dark` class on `<html>`.
+
+### Phase 15.5 — Long-term memory conventions
+
+109. **Memory ChromaDB collections are named `memories__{tenant_id[:8].lower()}__{model_id_safe}`.** This is distinct from the chunk collections (`chunks__...`). The naming helper `memory_collection_name(tenant_id, model_id)` in `infrastructure/vectors/chroma_memory_store.py` is the only function that constructs these names. Never hand-format or mix with chunk collection names.
+
+110. **Memory failure is NON-BLOCKING.** `after_memory_consolidation` routes to `NODE_END` (COMPLETED) even if the memory budget is exhausted. The user's report is already published. The orchestrator marks the job COMPLETED without waiting for memory acknowledgment. This applies to both the LangGraph edge (graceful END on budget exhaustion) and the consolidation worker (`asyncio.gather(return_exceptions=True)` — episodic/semantic failures are logged, not raised).
+
+111. **`MongoAnalysisRepository.iter_completed()` is the second documented cross-tenant Mongo query.** The first is `MongoReviewRepository.list_expired_pending()` (review sweeper). `iter_completed` is only called from `scripts/backfill_memories.py` — never from business-logic paths. Both are documented exceptions to Rule 3.
+
+112. **`MemoryRetriever` always filters by `tenant_id` AND `category_id` in ChromaDB queries.** Same isolation rule as chunk retrieval (Rule 35). Cross-category memory bleed is a tenant-trust violation, not just a quality regression. The filter is applied inside `ChromaMemoryStore.query_memories()` via `$and`.
+
+113. **Supersede detection uses cosine similarity only — no LLM.** Threshold: `MEMORY__SUPERSEDE_SIMILARITY_THRESHOLD=0.92` (default). Both the old and new memories are in the same embedding space, making distance-based comparison reliable. Adding an LLM judge for supersede decisions would add latency and cost without improving accuracy for this use case. The `_maybe_supersede` method guards against self-supersede (`old_id != new_memory_id`).
+
+114. **`Analyst` stores `_memory_final_k` at init time, passed as `memory_final_k=settings.memory.memory_final_k`.** Do NOT use `AnalysisSettings.memory_final_k` — that field does not exist. `MemorySettings.memory_final_k` is a separate config namespace (`MEMORY__MEMORY_FINAL_K`). The analyst worker passes both when constructing `Analyst(...)`.
+
+115. **User-curated memories (`source=USER_CURATED`) are subject to the same supersede logic as extracted ones.** A future automated extraction that scores ≥ 0.92 similarity will supersede a user-curated memory. This is intentional: extracted facts from actual analyses should take precedence over manually injected priors. Users who want a pinned fact should re-curate after supersede.
 
 ---
 

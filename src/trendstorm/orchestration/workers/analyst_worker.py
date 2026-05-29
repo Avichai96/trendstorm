@@ -429,8 +429,29 @@ async def run_worker() -> None:
         settings=settings.analysis,
         reranker=reranker,
     )
+
+    from trendstorm.infrastructure.mongo.repositories import MongoMemoryRepository
+    from trendstorm.infrastructure.vectors.chroma_memory_store import ChromaMemoryStore
+    from trendstorm.services.memory.retrieval import MemoryRetriever
+
+    chroma_memory = ChromaMemoryStore(settings.vector)
+    await chroma_memory.connect()
+    memory_repo = MongoMemoryRepository(mongo)
+    memory_retriever = MemoryRetriever(
+        embed=embedding_provider,
+        vector_store=chroma_memory,
+        memory_repo=memory_repo,
+    )
+
     validator = AnalysisValidator(chat_provider, settings.analysis)
-    analyst = Analyst(retriever, chat_provider, validator, settings.analysis)
+    analyst = Analyst(
+        retriever,
+        chat_provider,
+        validator,
+        settings.analysis,
+        memory_retriever=memory_retriever,
+        memory_final_k=settings.memory.memory_final_k,
+    )
 
     analysis_repo = MongoAnalysisRepository(mongo)
     category_repo = MongoCategoryRepository(mongo)
@@ -458,6 +479,7 @@ async def run_worker() -> None:
         if reranker is not None:
             await reranker.close()
         await chroma.close()
+        await chroma_memory.close()
         await mongo.close()
         shutdown_tracing()
 

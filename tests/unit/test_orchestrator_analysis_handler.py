@@ -298,7 +298,8 @@ def _make_publish_completed(
 class TestPublishCompletedHandler:
     """Tests for OrchestratorWorker._handle_publish_completed."""
 
-    async def test_success_injects_publishing_state_and_advances_to_completed(self) -> None:
+    async def test_success_injects_publishing_state_and_advances_to_memory_consolidation(self) -> None:
+        """Phase 15.5: successful publish routes to MEMORY_CONSOLIDATION, not COMPLETED."""
         worker, graph, _, _, _ = _build_worker(state=_make_state(stage=Stage.PUBLISHING))
         event = _make_publish_completed(success=True)
 
@@ -306,25 +307,21 @@ class TestPublishCompletedHandler:
 
         graph.aupdate_state.assert_called_once()
         update = graph.aupdate_state.call_args.args[1]
-        assert update["stage"] == Stage.COMPLETED
+        assert update["stage"] == Stage.MEMORY_CONSOLIDATION
         assert update["publishing"].report_doc_id == "md-1"
 
-        # Graph streamed to terminal
+        # Graph streamed (paused at memory_consolidation node)
         graph.astream.assert_called_once()
 
-    async def test_success_updates_job_status_to_completed(self) -> None:
+    async def test_success_does_not_update_status_to_completed_immediately(self) -> None:
+        """Phase 15.5: publish success routes to MEMORY_CONSOLIDATION; COMPLETED comes later."""
         worker, graph, jobs, _, _ = _build_worker(state=_make_state(stage=Stage.PUBLISHING))
-        # Second aget_state call (after astream) returns COMPLETED state.
-        completed_snapshot = MagicMock()
-        completed_snapshot.values = _make_state(stage=Stage.COMPLETED).model_dump()
-        graph.aget_state = AsyncMock(side_effect=[
-            graph.aget_state.return_value,  # first call: current state check
-            completed_snapshot,              # second call: after astream
-        ])
         await worker._handle_publish_completed(_make_publish_completed())
-        jobs.update_status.assert_called()
-        call_status = jobs.update_status.call_args.args[2]
-        assert call_status == JobStatus.COMPLETED
+        # update_status is NOT called to COMPLETED here — that happens in _handle_memory_completed.
+        # Only a failure path would call update_status from this handler on success.
+        for call in jobs.update_status.call_args_list:
+            status_arg = call.args[2] if len(call.args) > 2 else None
+            assert status_arg != JobStatus.COMPLETED, "Should not advance to COMPLETED from publish handler"
 
     async def test_failure_marks_job_failed_without_resuming(self) -> None:
         worker, graph, jobs, _, _ = _build_worker(state=_make_state(stage=Stage.PUBLISHING))
@@ -355,12 +352,12 @@ class TestPublishCompletedHandler:
         await worker._handle_publish_completed(_make_publish_completed())
         graph.aupdate_state.assert_not_called()
 
-    async def test_pdf_none_still_completes(self) -> None:
+    async def test_pdf_none_still_advances_to_memory_consolidation(self) -> None:
         worker, graph, _, _, _ = _build_worker(state=_make_state(stage=Stage.PUBLISHING))
         event = _make_publish_completed(pdf_report_id=None)
         await worker._handle_publish_completed(event)
         update = graph.aupdate_state.call_args.args[1]
-        assert update["stage"] == Stage.COMPLETED
+        assert update["stage"] == Stage.MEMORY_CONSOLIDATION
         assert update["publishing"].report_doc_id == "md-1"
 
     async def test_dispatcher_routes_publish_completed(self) -> None:

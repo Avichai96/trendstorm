@@ -24,6 +24,7 @@ from trendstorm.agents.orchestrator.edges import (
     NODE_FAIL,
     NODE_INGEST,
     NODE_INIT,
+    NODE_MEMORY_CONSOLIDATION,
     NODE_PUBLISH,
     NODE_REFINE,
     NODE_RETRIEVE,
@@ -260,12 +261,13 @@ class TestPhase8ProductionPathInterrupt:
         paused = JobState.model_validate(snapshot.values)
         assert paused.stage == Stage.PUBLISHING
 
-        # Publisher worker simulation: inject report IDs + advance to COMPLETED.
-        from trendstorm.agents.state import PublishingState
+        # Publisher worker simulation: inject report IDs + advance to MEMORY_CONSOLIDATION
+        # (Phase 15.5: publish no longer routes directly to COMPLETED).
+        from trendstorm.agents.state import MemoryConsolidationState, PublishingState
         await graph.aupdate_state(
             prod_config,
             {
-                "stage": Stage.COMPLETED,
+                "stage": Stage.MEMORY_CONSOLIDATION,
                 "publishing": PublishingState(
                     report_doc_id="report-md-1",
                     report_blob_uri="s3://trendstorm-reports/job-1/report-md-1/report.md",
@@ -274,7 +276,31 @@ class TestPhase8ProductionPathInterrupt:
             as_node=NODE_PUBLISH,
         )
 
-        # Final resume: after_publish sees report_doc_id → END.
+        # Resume — runs memory_consolidation_node (production path pauses at NODE_MEMORY_CONSOLIDATION).
+        nodes_run_2: list[str] = []
+        async for step in graph.astream(
+            None, config=prod_config, interrupt_after=[NODE_MEMORY_CONSOLIDATION]
+        ):
+            for node_name in step:
+                if node_name != "__interrupt__":
+                    nodes_run_2.append(node_name)
+
+        assert NODE_MEMORY_CONSOLIDATION in nodes_run_2
+
+        # Memory worker simulation: inject memory result + advance to COMPLETED.
+        await graph.aupdate_state(
+            prod_config,
+            {
+                "stage": Stage.COMPLETED,
+                "memory": MemoryConsolidationState(
+                    episodic_memory_id="ep-1",
+                    semantic_memory_ids=["s1"],
+                ),
+            },
+            as_node=NODE_MEMORY_CONSOLIDATION,
+        )
+
+        # Final resume: after_memory_consolidation sees COMPLETED → END.
         async for _ in graph.astream(None, config=prod_config):
             pass
 

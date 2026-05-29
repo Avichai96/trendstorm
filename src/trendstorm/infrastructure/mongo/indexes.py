@@ -496,6 +496,62 @@ INDEXES: list[IndexSpec] = [
         name="tenant_settings__tenant_unique",
         unique=True,
     ),
+    # =======================================================================
+    # memories — long-term episodic + semantic memory store (Phase 15.5)
+    # =======================================================================
+    # Query: "list active memories for a category by kind, newest first."
+    # Primary retrieval index — used by MemoryRetriever and the API list endpoint.
+    IndexSpec(
+        collection=Collection.MEMORIES,
+        keys=[
+            ("tenant_id", ASCENDING),
+            ("category_id", ASCENDING),
+            ("kind", ASCENDING),
+            ("_id", DESCENDING),
+        ],
+        name="memories__tenant_category_kind",
+    ),
+    # Partial index: active-only (is_active=True) — serves 99% of read traffic.
+    # Superseded records are excluded here; the full index above covers auditing.
+    IndexSpec(
+        collection=Collection.MEMORIES,
+        keys=[
+            ("tenant_id", ASCENDING),
+            ("category_id", ASCENDING),
+            ("is_active", ASCENDING),
+            ("kind", ASCENDING),
+        ],
+        name="memories__tenant_category_active",
+        partial_filter_expression={"is_active": True},
+    ),
+    # Lookup by source_job_id: "which memories came from this job?"
+    # Used by the consolidation worker idempotency check and the backfill script.
+    IndexSpec(
+        collection=Collection.MEMORIES,
+        keys=[("tenant_id", ASCENDING), ("source_job_id", ASCENDING)],
+        name="memories__tenant_job",
+    ),
+    # Supersede sweep: "find active memories this one supersedes."
+    # Sparse because most memories have superseded_by=null.
+    IndexSpec(
+        collection=Collection.MEMORIES,
+        keys=[("tenant_id", ASCENDING), ("superseded_by", ASCENDING)],
+        name="memories__tenant_superseded_by",
+        sparse=True,
+    ),
+    # TTL: 2 years. Memory is long-lived but not permanent.
+    IndexSpec(
+        collection=Collection.MEMORIES,
+        keys=[("created_at", ASCENDING)],
+        name="memories__ttl_created",
+        expire_after_seconds=_TTL_365_DAYS * 2,
+    ),
+    # BM25 text index on content for keyword search over memories.
+    IndexSpec(
+        collection=Collection.MEMORIES,
+        keys=[("content", TEXT)],  # type: ignore[list-item]
+        name="memories__content_bm25",
+    ),
 ]
 
 

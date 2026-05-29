@@ -232,6 +232,15 @@ run-worker-dev: ## Run the worker with pretty console logging
 worker-review-timeout: ## Run the review timeout sweeper worker locally
 	uv run python -m trendstorm.orchestration.workers.review_timeout_worker
 
+.PHONY: worker-memory
+worker-memory: ## Run the memory consolidation worker locally
+	APP__LOG_FORMAT=console APP__LOG_LEVEL=DEBUG \
+		uv run python -m trendstorm.orchestration.workers.memory_consolidation_worker
+
+.PHONY: backfill-memories
+backfill-memories: ## Backfill long-term memories for existing analyses (--dry-run to preview)
+	uv run python scripts/backfill_memories.py $(ARGS)
+
 # -----------------------------------------------------------------------------
 # Python SDK
 # -----------------------------------------------------------------------------

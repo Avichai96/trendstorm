@@ -31,6 +31,7 @@ NODE_ANALYZE = "analyze"
 NODE_REFINE = "refine"
 NODE_REVIEW_GATE = "review_gate"   # HITL: pause or pass-through before publish
 NODE_PUBLISH = "publish"
+NODE_MEMORY_CONSOLIDATION = "memory_consolidation"   # Phase 15.5: episodic + semantic write
 NODE_FAIL = "fail"
 NODE_END = "__end__"   # LangGraph's reserved terminal node
 
@@ -106,7 +107,23 @@ def after_review_gate(state: JobState) -> str:
 
 def after_publish(state: JobState) -> str:
     if state.publishing.report_doc_id:
-        return NODE_END
+        return NODE_MEMORY_CONSOLIDATION
     if state.has_budget(Stage.PUBLISHING):
         return NODE_PUBLISH
     return NODE_FAIL
+
+
+def after_memory_consolidation(state: JobState) -> str:
+    """Route after memory_consolidation_node.
+
+    Memory write is best-effort: even if it failed the job reaches COMPLETED.
+    The budget check only retries transient failures (Chroma down, LLM timeout).
+    """
+    if state.stage == Stage.COMPLETED:
+        return NODE_END
+    if state.has_budget(Stage.MEMORY_CONSOLIDATION):
+        return NODE_MEMORY_CONSOLIDATION
+    # Budget exhausted or non-retriable error: graceful degradation to COMPLETED.
+    # Memory failure must not fail the job — the user's report is already published.
+    logger.info("memory_consolidation.budget_exhausted_graceful", job_id=state.job_id)
+    return NODE_END

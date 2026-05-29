@@ -327,9 +327,9 @@ class TestJobStateHitlFields:
         assert state.review_decision_comment is None
         assert state.skip_hitl_gate is False
 
-    def test_schema_version_is_2(self) -> None:
+    def test_schema_version_is_3(self) -> None:
         state = _make_state()
-        assert state.schema_version == 2
+        assert state.schema_version == 3
 
     def test_hitl_fields_can_be_set(self) -> None:
         review_id = new_id()

@@ -51,6 +51,9 @@ class Collection(StrEnum):
     REVIEWS = "reviews"
     TENANT_SETTINGS = "tenant_settings"
 
+    # ---- Long-term memory (Phase 15.5) ----
+    MEMORIES = "memories"
+
     # ---- LangGraph-owned (we don't write to these directly) ----
     # These are listed for completeness; the LangGraph saver manages them.
     CHECKPOINTS = "checkpoints"

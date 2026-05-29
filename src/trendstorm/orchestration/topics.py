@@ -66,6 +66,13 @@ class Topic(StrEnum):
     REVIEW_REQUESTED      = "trendstorm.review.requested.v1"
     REVIEW_RESOLVED       = "trendstorm.review.resolved.v1"
 
+    # --- Long-term memory (Phase 15.5) ---
+    MEMORY_PENDING        = "trendstorm.memory.pending.v1"
+    MEMORY_COMPLETED      = "trendstorm.memory.completed.v1"
+    RETRY_MEMORY_30S      = "trendstorm.retry.memory.30s.v1"
+    RETRY_MEMORY_5M       = "trendstorm.retry.memory.5m.v1"
+    RETRY_MEMORY_1H       = "trendstorm.retry.memory.1h.v1"
+
 
 class ConsumerGroup(StrEnum):
     """Canonical consumer group names.
@@ -85,3 +92,4 @@ class ConsumerGroup(StrEnum):
     PRODUCTION_EVAL     = "trendstorm.production-eval"
     DLQ_MONITOR         = "trendstorm.dlq-monitor"
     REVIEW_TIMEOUT      = "trendstorm.review-timeout"
+    MEMORY_CONSOLIDATION = "trendstorm.memory-consolidation"

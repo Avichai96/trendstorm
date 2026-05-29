@@ -13,6 +13,7 @@ from trendstorm.agents.orchestrator.edges import (
     NODE_END,
     NODE_FAIL,
     NODE_INGEST,
+    NODE_MEMORY_CONSOLIDATION,
     NODE_PUBLISH,
     NODE_REFINE,
     NODE_RETRIEVE,
@@ -20,6 +21,7 @@ from trendstorm.agents.orchestrator.edges import (
     after_analyze,
     after_embed,
     after_ingest,
+    after_memory_consolidation,
     after_publish,
     after_retrieve,
     after_review_gate,
@@ -33,6 +35,7 @@ from trendstorm.agents.state import (
     IngestionState,
     JobState,
     KnowledgeState,
+    MemoryConsolidationState,
     ObservabilityContext,
     PublishingState,
     RetrievalState,
@@ -196,12 +199,13 @@ class TestAfterReviewGate:
 
 @pytest.mark.unit
 class TestAfterPublish:
-    def test_report_id_goes_to_end(self) -> None:
+    def test_report_id_goes_to_memory_consolidation(self) -> None:
+        """Phase 15.5: after a successful publish, route to memory consolidation."""
         s = _state(
             stage=Stage.PUBLISHING,
             publishing=PublishingState(report_doc_id="r1"),
         )
-        assert after_publish(s) == NODE_END
+        assert after_publish(s) == NODE_MEMORY_CONSOLIDATION
 
     def test_empty_with_budget_retries(self) -> None:
         s = _state(stage=Stage.PUBLISHING)
@@ -210,3 +214,24 @@ class TestAfterPublish:
     def test_empty_no_budget_fails(self) -> None:
         s = _state(stage=Stage.PUBLISHING, attempts={Stage.PUBLISHING: 99})
         assert after_publish(s) == NODE_FAIL
+
+
+@pytest.mark.unit
+class TestAfterMemoryConsolidation:
+    def test_stage_completed_goes_to_end(self) -> None:
+        """Stage COMPLETED (node returned success) → graph ends."""
+        s = _state(stage=Stage.COMPLETED)
+        assert after_memory_consolidation(s) == NODE_END
+
+    def test_stage_memory_consolidation_with_budget_retries(self) -> None:
+        """Stage still MEMORY_CONSOLIDATION (pending) + budget → retry node."""
+        s = _state(stage=Stage.MEMORY_CONSOLIDATION)
+        assert after_memory_consolidation(s) == NODE_MEMORY_CONSOLIDATION
+
+    def test_stage_memory_consolidation_no_budget_graceful_end(self) -> None:
+        """Budget exhausted on memory consolidation → graceful END (memory is non-blocking)."""
+        s = _state(
+            stage=Stage.MEMORY_CONSOLIDATION,
+            attempts={Stage.MEMORY_CONSOLIDATION: 99},
+        )
+        assert after_memory_consolidation(s) == NODE_END

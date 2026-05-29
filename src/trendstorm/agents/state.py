@@ -125,6 +125,17 @@ class PublishingState(BaseModel):
     report_blob_uri: str | None = None
 
 
+class MemoryConsolidationState(BaseModel):
+    """Outputs of the memory_consolidation stage (Phase 15.5).
+
+    Contains references to the memories written after publish — one episodic
+    memory per job, N semantic memories from the LLM extraction pass.
+    """
+
+    episodic_memory_id: str | None = None       # ULID of the episodic Memory doc
+    semantic_memory_ids: list[str] = Field(default_factory=list)  # ULIDs of semantic docs
+
+
 class ObservabilityContext(BaseModel):
     """Carried with state so resumed workflows continue the same trace."""
 
@@ -147,6 +158,7 @@ DEFAULT_RETRY_BUDGETS: dict[Stage, int] = {
     Stage.RETRIEVING: 3,
     Stage.ANALYZING: 2,
     Stage.PUBLISHING: 3,
+    Stage.MEMORY_CONSOLIDATION: 2,   # Phase 15.5: memory write is best-effort
 }
 
 # Max self-correction loops (RETRIEVING <-> ANALYZING). Without a cap, a
@@ -173,7 +185,7 @@ class JobState(BaseModel):
     )
 
     # --- Schema versioning ----------------------------------------------
-    schema_version: int = 2
+    schema_version: int = 3   # bumped for Phase 15.5: MemoryConsolidationState added
 
     # --- Identity --------------------------------------------------------
     job_id: str
@@ -198,6 +210,7 @@ class JobState(BaseModel):
     retrieval: RetrievalState = Field(default_factory=RetrievalState)
     analysis: AnalysisState = Field(default_factory=AnalysisState)
     publishing: PublishingState = Field(default_factory=PublishingState)
+    memory: MemoryConsolidationState = Field(default_factory=MemoryConsolidationState)
 
     # --- HITL review state ----------------------------------------------
     # Set to the ReviewRequest.id when the job is paused for human review.

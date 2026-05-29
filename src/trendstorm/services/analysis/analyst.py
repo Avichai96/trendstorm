@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from trendstorm.domain.llm.providers import StructuredChatProvider
     from trendstorm.domain.retrieval.models import RetrievedChunk
     from trendstorm.services.analysis.validator import AnalysisValidator
+    from trendstorm.services.memory.retrieval import MemoryRetriever, RetrievedMemory
     from trendstorm.services.retrieval.hybrid import HybridRetriever
     from trendstorm.shared.config import AnalysisSettings
 
@@ -137,12 +138,16 @@ class Analyst:
         validator: AnalysisValidator,
         settings: AnalysisSettings,
         *,
+        memory_retriever: MemoryRetriever | None = None,
+        memory_final_k: int = 5,
         _prompt_text: str | None = None,
     ) -> None:
         self._retriever = retriever
         self._chat = chat_provider
         self._validator = validator
         self._settings = settings
+        self._memory_retriever = memory_retriever
+        self._memory_final_k = memory_final_k
         self._prompt: str = (
             _prompt_text if _prompt_text is not None else _load_analyst_prompt()
         )
@@ -172,7 +177,8 @@ class Analyst:
             base_query = query or self._default_query(category)
             retrieval_query = self._compose_retrieval_query(base_query, refinement_notes)
 
-            # 1. Retrieve
+            # 1. Retrieve chunks + memories in parallel (memories are optional).
+            import asyncio as _asyncio
             with tracer.start_as_current_span("analysis.retrieve"):
                 request = RetrievalRequest(
                     query=retrieval_query,
@@ -180,8 +186,21 @@ class Analyst:
                     category_id=category.id,
                     top_k=self._settings.final_k,
                 )
-                chunks = await self._retriever.retrieve(request)
+                if self._memory_retriever is not None:
+                    chunks, memories = await _asyncio.gather(
+                        self._retriever.retrieve(request),
+                        self._memory_retriever.retrieve_relevant(
+                            retrieval_query,
+                            tenant_id,
+                            category.id,
+                            top_k=self._memory_final_k,
+                        ),
+                    )
+                else:
+                    chunks = await self._retriever.retrieve(request)
+                    memories = []
             span.set_attribute("analyst.n_chunks", len(chunks))
+            span.set_attribute("analyst.n_memories", len(memories))
 
             if not chunks:
                 raise ValidationError(
@@ -197,6 +216,7 @@ class Analyst:
             with tracer.start_as_current_span("analysis.generate"):
                 analysis = await self._generate_analysis(
                     chunks=chunks,
+                    memories=memories,
                     category=category,
                     tenant_id=tenant_id,
                     job_id=job_id,
@@ -241,6 +261,7 @@ class Analyst:
         self,
         *,
         chunks: list[RetrievedChunk],
+        memories: list[RetrievedMemory] | None = None,
         category: Category,
         tenant_id: str,
         job_id: str,
@@ -256,6 +277,7 @@ class Analyst:
                 content=_format_user_message(
                     category=category,
                     chunks=chunks,
+                    memories=memories or [],
                     refinement_notes=refinement_notes,
                 ),
             ),
@@ -416,6 +438,7 @@ def _format_user_message(
     category: Category,
     chunks: list[RetrievedChunk],
     refinement_notes: str | None,
+    memories: list[RetrievedMemory] | None = None,
 ) -> str:
     """Render the inputs into a single user message for the analyst.
 
@@ -436,6 +459,24 @@ def _format_user_message(
     if category.keywords:
         parts.append(f"Keywords: {', '.join(category.keywords)}")
     parts.append("")
+
+    if memories:
+        parts.append("## Historical Memory Context")
+        parts.append(
+            f"The following {len(memories)} memories are durable claims from prior analyses "
+            "of this category. Treat them as authoritative historical context, but chunks "
+            "below are authoritative for recency. Surface disagreements — do not silently "
+            "prefer one over the other."
+        )
+        parts.append("")
+        for mem in memories:
+            parts.append(
+                f'<memory id="{mem.memory_id}" kind="{mem.kind.value}" '
+                f'confidence="{mem.confidence:.2f}">'
+            )
+            parts.append(mem.content)
+            parts.append("</memory>")
+            parts.append("")
 
     if refinement_notes:
         parts.append("## Validator Feedback from Prior Attempt")

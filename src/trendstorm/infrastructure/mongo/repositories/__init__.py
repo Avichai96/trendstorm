@@ -41,6 +41,9 @@ from trendstorm.infrastructure.mongo.repositories.tenant_settings_repository imp
 from trendstorm.infrastructure.mongo.repositories.url_blocklist_repository import (
     MongoUrlBlocklistRepository,
 )
+from trendstorm.infrastructure.mongo.repositories.memory_repository import (
+    MongoMemoryRepository,
+)
 
 __all__ = [
     "IdempotencyRepository",
@@ -58,4 +61,5 @@ __all__ = [
     "MongoTenantRepository",
     "MongoTenantSettingsRepository",
     "MongoUrlBlocklistRepository",
+    "MongoMemoryRepository",
 ]

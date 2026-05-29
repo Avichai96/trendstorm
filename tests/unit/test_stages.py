@@ -40,7 +40,8 @@ class TestStageTransitions:
 
     def test_any_stage_can_be_cancelled(self) -> None:
         for s in (Stage.PENDING, Stage.INGESTING, Stage.EMBEDDING,
-                  Stage.RETRIEVING, Stage.ANALYZING, Stage.AWAITING_REVIEW, Stage.PUBLISHING):
+                  Stage.RETRIEVING, Stage.ANALYZING, Stage.AWAITING_REVIEW,
+                  Stage.PUBLISHING, Stage.MEMORY_CONSOLIDATION):
             assert is_valid_transition(s, Stage.CANCELLED), f"{s} -> CANCELLED disallowed"
 
     def test_self_retry_allowed_for_work_stages(self) -> None:
@@ -59,21 +60,26 @@ class TestStageTransitions:
         assert not is_valid_transition(Stage.RETRIEVING, Stage.EMBEDDING)
         assert not is_valid_transition(Stage.PUBLISHING, Stage.ANALYZING)
 
-    def test_completed_is_only_reachable_from_publishing(self) -> None:
+    def test_completed_is_only_reachable_from_memory_consolidation(self) -> None:
+        """Phase 15.5: MEMORY_CONSOLIDATION is the gate before COMPLETED."""
         for s in Stage:
-            if s == Stage.PUBLISHING:
+            if s == Stage.MEMORY_CONSOLIDATION:
                 assert is_valid_transition(s, Stage.COMPLETED)
             else:
                 assert not is_valid_transition(s, Stage.COMPLETED), (
                     f"{s} -> COMPLETED should not be allowed"
                 )
 
+    def test_publishing_leads_to_memory_consolidation(self) -> None:
+        assert is_valid_transition(Stage.PUBLISHING, Stage.MEMORY_CONSOLIDATION)
+        assert not is_valid_transition(Stage.PUBLISHING, Stage.COMPLETED)
+
     def test_happy_path_walk(self) -> None:
-        """Sanity check the entire forward pipeline is reachable."""
+        """Sanity check the entire forward pipeline is reachable (Phase 15.5 path)."""
         chain = [
             Stage.PENDING, Stage.INGESTING, Stage.EMBEDDING,
             Stage.RETRIEVING, Stage.ANALYZING, Stage.PUBLISHING,
-            Stage.COMPLETED,
+            Stage.MEMORY_CONSOLIDATION, Stage.COMPLETED,
         ]
         for a, b in itertools.pairwise(chain):
             assert is_valid_transition(a, b), f"Happy-path step {a} -> {b} disallowed"

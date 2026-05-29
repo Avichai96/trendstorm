@@ -33,6 +33,7 @@ Design:
       reduces false positives significantly).
     - IBAN check validates the modular arithmetic per ISO 13616-1.
 """
+
 from __future__ import annotations
 
 import re
@@ -46,14 +47,12 @@ from typing import Protocol
 # SSN: 3-2-4 digit, hyphenated or space-separated
 _SSN_RE = re.compile(r"\b(?!000|666|9\d{2})\d{3}[-\s](?!00)\d{2}[-\s](?!0000)\d{4}\b")
 
-# Credit card: 13–19 digits, groups separated by spaces or hyphens
+# Credit card: 13-19 digits, groups separated by spaces or hyphens
 # Validated by Luhn after matching.
 _CC_RE = re.compile(r"\b(?:\d{4}[-\s]?){3}\d{1,7}\b")
 
 # Email: standard RFC 5321 local@domain
-_EMAIL_RE = re.compile(
-    r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"
-)
+_EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")
 
 # Phone: E.164 (+1234567890) or North American (1-800-555-0100)
 _PHONE_RE = re.compile(
@@ -81,6 +80,7 @@ _IBAN_RE = re.compile(
 # Luhn algorithm
 # ---------------------------------------------------------------------------
 
+
 def _luhn_valid(number: str) -> bool:
     """Return True if the digit string passes the Luhn check."""
     digits = [int(c) for c in number if c.isdigit()]
@@ -100,6 +100,7 @@ def _luhn_valid(number: str) -> bool:
 # IBAN mod-97 validation (ISO 13616-1)
 # ---------------------------------------------------------------------------
 
+
 def _iban_valid(iban: str) -> bool:
     """Return True if the IBAN passes the ISO 13616-1 mod-97 check."""
     iban = iban.replace(" ", "").upper()
@@ -109,9 +110,7 @@ def _iban_valid(iban: str) -> bool:
     rearranged = iban[4:] + iban[:4]
     # Convert letters to digits (A=10, B=11, ...)
     try:
-        numeric = "".join(
-            str(ord(c) - 55) if c.isalpha() else c for c in rearranged
-        )
+        numeric = "".join(str(ord(c) - 55) if c.isalpha() else c for c in rearranged)
         return int(numeric) % 97 == 1
     except (ValueError, OverflowError):
         return False
@@ -121,12 +120,13 @@ def _iban_valid(iban: str) -> bool:
 # Result types
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True, slots=True)
 class PIIDetection:
     """One detected PII occurrence."""
 
-    pii_type: str    # "SSN" | "CC" | "EMAIL" | "PHONE" | "IBAN"
-    start: int       # char offset in original text
+    pii_type: str  # "SSN" | "CC" | "EMAIL" | "PHONE" | "IBAN"
+    start: int  # char offset in original text
     end: int
     redact_token: str  # replacement string
 
@@ -148,6 +148,7 @@ class RedactionResult:
 # Protocol (seam for Presidio or other backends)
 # ---------------------------------------------------------------------------
 
+
 class PIIDetector(Protocol):
     """Protocol for PII detection backends."""
 
@@ -159,6 +160,7 @@ class PIIDetector(Protocol):
 # ---------------------------------------------------------------------------
 # Default implementation (regex-based)
 # ---------------------------------------------------------------------------
+
 
 class DefaultPIIDetector:
     """Regex-based PII detector. Satisfies the PIIDetector Protocol."""
@@ -180,32 +182,38 @@ class DefaultPIIDetector:
 
         # --- SSN ---
         for m in _SSN_RE.finditer(text):
-            detections.append(PIIDetection(
-                pii_type="SSN",
-                start=m.start(),
-                end=m.end(),
-                redact_token="[REDACTED:SSN]",
-            ))
+            detections.append(
+                PIIDetection(
+                    pii_type="SSN",
+                    start=m.start(),
+                    end=m.end(),
+                    redact_token="[REDACTED:SSN]",
+                )
+            )
 
         # --- Credit card (Luhn-validated) ---
         for m in _CC_RE.finditer(text):
             digits_only = re.sub(r"[-\s]", "", m.group())
             if _luhn_valid(digits_only):
-                detections.append(PIIDetection(
-                    pii_type="CC",
-                    start=m.start(),
-                    end=m.end(),
-                    redact_token="[REDACTED:CC]",
-                ))
+                detections.append(
+                    PIIDetection(
+                        pii_type="CC",
+                        start=m.start(),
+                        end=m.end(),
+                        redact_token="[REDACTED:CC]",
+                    )
+                )
 
         # --- Email ---
         for m in _EMAIL_RE.finditer(text):
-            detections.append(PIIDetection(
-                pii_type="EMAIL",
-                start=m.start(),
-                end=m.end(),
-                redact_token="[REDACTED:EMAIL]",
-            ))
+            detections.append(
+                PIIDetection(
+                    pii_type="EMAIL",
+                    start=m.start(),
+                    end=m.end(),
+                    redact_token="[REDACTED:EMAIL]",
+                )
+            )
 
         # --- Phone ---
         for m in _PHONE_RE.finditer(text):
@@ -213,23 +221,27 @@ class DefaultPIIDetector:
             # Filter out short/ambiguous matches (< 7 digits)
             digits = re.sub(r"\D", "", raw)
             if len(digits) >= 7:
-                detections.append(PIIDetection(
-                    pii_type="PHONE",
-                    start=m.start(),
-                    end=m.start() + len(raw),
-                    redact_token="[REDACTED:PHONE]",
-                ))
+                detections.append(
+                    PIIDetection(
+                        pii_type="PHONE",
+                        start=m.start(),
+                        end=m.start() + len(raw),
+                        redact_token="[REDACTED:PHONE]",
+                    )
+                )
 
         # --- IBAN ---
         for m in _IBAN_RE.finditer(text):
             candidate = m.group()
             if _iban_valid(candidate):
-                detections.append(PIIDetection(
-                    pii_type="IBAN",
-                    start=m.start(),
-                    end=m.end(),
-                    redact_token="[REDACTED:IBAN]",
-                ))
+                detections.append(
+                    PIIDetection(
+                        pii_type="IBAN",
+                        start=m.start(),
+                        end=m.end(),
+                        redact_token="[REDACTED:IBAN]",
+                    )
+                )
 
         if not detections:
             return RedactionResult(
@@ -251,7 +263,7 @@ class DefaultPIIDetector:
         parts: list[str] = []
         pos = 0
         for det in merged:
-            parts.append(text[pos:det.start])
+            parts.append(text[pos : det.start])
             parts.append(det.redact_token)
             pos = det.end
         parts.append(text[pos:])

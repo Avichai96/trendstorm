@@ -19,6 +19,7 @@ A third endpoint, /health/startup (not implemented here), is useful for slow-sta
     - Prevents kill-during-init for apps that take >30s to be ready.
     - Our app starts in <5s, so we skip this.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -44,6 +45,7 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 # --- Response models ---------------------------------------------------------
 
+
 class LiveResponse(BaseModel):
     status: Literal["ok"] = "ok"
 
@@ -60,6 +62,7 @@ class ReadyResponse(BaseModel):
 
 
 # --- Endpoints ---------------------------------------------------------------
+
 
 @router.get("/live", response_model=LiveResponse)
 async def liveness() -> LiveResponse:
@@ -113,6 +116,7 @@ async def readiness(
 
 
 # --- Helpers ----------------------------------------------------------------
+
 
 async def _bounded_health(check_coro: Awaitable[bool], deadline: float) -> bool:
     """Run a health check with a hard timeout; never raises."""

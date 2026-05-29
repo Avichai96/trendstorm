@@ -31,6 +31,7 @@ Usage:
         )
         result = await fetcher.fetch(url, source_id=src.id, tenant_id=tenant_id)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -71,9 +72,9 @@ class FetchResult:
     """Intermediate result from a single HTTP fetch, before parsing."""
 
     source_id: str
-    url: str            # final URL after redirects
+    url: str  # final URL after redirects
     raw_bytes: bytes
-    content_type: str   # bare MIME type (params stripped) for parser routing
+    content_type: str  # bare MIME type (params stripped) for parser routing
     encoding: str | None
     metadata: FetchMetadata
 
@@ -93,20 +94,23 @@ class Fetcher:
             only the global blocklist and SSRF IP rules are enforced.
         audit_log_repo: Optional audit log repository. When None, block events
             are logged via structlog only (still metric-counted).
+
     """
 
     # Content-types we'll pass to parsers. Anything else (PDFs, images, binary)
     # is rejected early rather than downloading bytes we can't use.
-    _ACCEPTED_MIME_TYPES: frozenset[str] = frozenset({
-        "text/html",
-        "application/xhtml+xml",
-        "application/xml",
-        "text/xml",
-        "application/rss+xml",
-        "application/atom+xml",
-        "application/json",
-        "text/plain",
-    })
+    _ACCEPTED_MIME_TYPES: frozenset[str] = frozenset(
+        {
+            "text/html",
+            "application/xhtml+xml",
+            "application/xml",
+            "text/xml",
+            "application/rss+xml",
+            "application/atom+xml",
+            "application/json",
+            "text/plain",
+        }
+    )
 
     def __init__(
         self,
@@ -137,6 +141,7 @@ class Fetcher:
             HostRateLimitedError: Our own bucket is exhausted for this host.
             FetchError: HTTP error (4xx/5xx), network failure, timeout,
                 oversized response, or unacceptable content-type.
+
         """
         # Pre-flight SSRF validation on the initial URL
         await self._validate_and_audit(url, tenant_id=tenant_id, source_id=source_id)
@@ -163,9 +168,7 @@ class Fetcher:
                 },
             ):
                 try:
-                    response = await self._client.get(
-                        current_url, follow_redirects=False
-                    )
+                    response = await self._client.get(current_url, follow_redirects=False)
                 except httpx.TimeoutException as exc:
                     raise FetchError(
                         f"Fetch timed out for {url!r}",
@@ -192,7 +195,7 @@ class Fetcher:
                     )
 
                 # Resolve relative Location headers against current URL
-                next_url = str(httpx.URL(current_url).copy_with()) if not location else location
+                next_url = location if location else str(httpx.URL(current_url).copy_with())
                 if location.startswith("/"):
                     parsed = urlsplit(current_url)
                     next_url = f"{parsed.scheme}://{parsed.netloc}{location}"
@@ -283,19 +286,16 @@ class Fetcher:
     # Private validation helpers
     # ------------------------------------------------------------------
 
-    async def _validate_and_audit(
-        self, url: str, *, tenant_id: str, source_id: str
-    ) -> None:
+    async def _validate_and_audit(self, url: str, *, tenant_id: str, source_id: str) -> None:
         """Run SSRF + blocklist checks on url; audit and metric on block."""
         hostname = (urlsplit(url).hostname or "").lower()
         try:
             check_global_blocklist(hostname, url)
-            await asyncio.get_event_loop().run_in_executor(
-                None, validate_url, url
-            )
+            await asyncio.get_event_loop().run_in_executor(None, validate_url, url)
             if self._blocklist_repo is not None:
                 await check_tenant_blocklist(
-                    hostname, url,
+                    hostname,
+                    url,
                     tenant_id=tenant_id,
                     repo=self._blocklist_repo,
                 )
@@ -315,7 +315,8 @@ class Fetcher:
             )
             if self._blocklist_repo is not None:
                 await check_tenant_blocklist(
-                    hostname, to_url,
+                    hostname,
+                    to_url,
                     tenant_id=tenant_id,
                     repo=self._blocklist_repo,
                 )
@@ -337,6 +338,7 @@ class Fetcher:
         )
         if self._audit_log_repo is not None:
             from trendstorm.domain.audit_log.models import AuditLogEntry
+
             entry = AuditLogEntry(
                 tenant_id=tenant_id,
                 event_type="ssrf_blocked",

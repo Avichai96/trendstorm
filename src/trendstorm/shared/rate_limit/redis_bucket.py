@@ -15,6 +15,7 @@ Algorithm: token bucket with Redis atomic Lua script.
 
 The Lua script is atomic — no TOCTOU race between read and write.
 """
+
 from __future__ import annotations
 
 import time

@@ -12,6 +12,7 @@ is small enough to be irrelevant for chunk size decisions.
 The encoding is loaded once and cached — tiktoken downloads a vocabulary
 file on first call (cached to disk afterwards). Subsequent calls are fast.
 """
+
 from __future__ import annotations
 
 import functools

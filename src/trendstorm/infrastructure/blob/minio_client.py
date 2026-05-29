@@ -17,6 +17,7 @@ Two buckets are provisioned at startup if absent:
     - bucket_raw    raw fetched bytes + parsed text (per RawDocument)
     - bucket_reports rendered final reports (per Report)
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -39,8 +40,8 @@ class MinioClient:
     def __init__(self, settings: BlobSettings) -> None:
         self._settings = settings
         self._session: aioboto3.Session | None = None
-        self._ctx: Any = None       # aioboto3 async context manager
-        self._client: Any = None    # underlying botocore S3 client
+        self._ctx: Any = None  # aioboto3 async context manager
+        self._client: Any = None  # underlying botocore S3 client
 
     # ------------------------------------------------------------------ #
     # Lifecycle                                                            #
@@ -102,7 +103,10 @@ class MinioClient:
                     logger.info("blob_bucket_created", bucket=bucket)
                 except ClientError as create_exc:
                     # Race: another instance created it between head and create.
-                    if create_exc.response.get("Error", {}).get("Code") != "BucketAlreadyOwnedByYou":
+                    if (
+                        create_exc.response.get("Error", {}).get("Code")
+                        != "BucketAlreadyOwnedByYou"
+                    ):
                         raise
 
     # ------------------------------------------------------------------ #

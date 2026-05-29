@@ -5,6 +5,7 @@ further sitemap URLs under <sitemap><loc>). The discovered URLs are returned
 in ParseResult.discovered_urls so the pipeline can spawn additional fetch
 tasks for each URL instead of treating the sitemap text as content.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

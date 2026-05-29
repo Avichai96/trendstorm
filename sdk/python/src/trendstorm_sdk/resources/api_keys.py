@@ -1,10 +1,10 @@
 """API keys resource — provision and revoke per-tenant API keys."""
+
 from __future__ import annotations
 
 from trendstorm_shared.models import (
     ApiKeyCreatedResponse,
     ApiKeyListResponse,
-    ApiKeyResponse,
 )
 
 from ._base import AsyncAPIResource

@@ -11,6 +11,7 @@ Error semantics differ from cloud providers:
     Connection errors              → LLMTransientError (Ollama not running)
     Other errors                   → LLMTransientError
 """
+
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -29,7 +30,7 @@ logger = get_logger(__name__)
 _DEFAULT_HOST = "http://localhost:11434"
 _DEFAULT_MODEL = "nomic-embed-text"
 _DEFAULT_DIMENSIONS = 768
-_OLLAMA_MAX_BATCH = 64       # local model; no hard API limit, but keep batches modest
+_OLLAMA_MAX_BATCH = 64  # local model; no hard API limit, but keep batches modest
 _OLLAMA_MAX_INPUT_TOKENS = 8192
 
 

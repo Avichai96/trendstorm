@@ -23,6 +23,7 @@ Sync usage::
     with SyncTrendStormClient(api_key="ts_live_...") as ts:
         cats = ts.categories.list()
 """
+
 from trendstorm_sdk._client import TrendStormClient
 from trendstorm_sdk._errors import (
     APIError,

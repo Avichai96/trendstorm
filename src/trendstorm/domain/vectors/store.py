@@ -12,6 +12,7 @@ Metadata keys stored at upsert time and available for filtering at query time:
     document_id — which RawDocument this chunk came from
     source_id   — denormalized from the document for provenance display
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable

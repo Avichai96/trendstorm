@@ -40,6 +40,7 @@ Maintaining indexes:
     - To DROP an index: remove from this list AND delete it in Mongo. The
       seeder doesn't auto-drop (too dangerous).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -63,6 +64,7 @@ _TTL_365_DAYS = 365 * _SECONDS_PER_DAY
 # Spec
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True, slots=True)
 class IndexSpec:
     """Declarative index definition.
@@ -78,7 +80,7 @@ class IndexSpec:
     sparse: bool = False
     expire_after_seconds: int | None = None
     partial_filter_expression: dict[str, Any] | None = None
-    background: bool = True            # production index builds are always background
+    background: bool = True  # production index builds are always background
 
     def to_pymongo_kwargs(self) -> dict[str, Any]:
         kwargs: dict[str, Any] = {"name": self.name, "background": self.background}
@@ -109,7 +111,6 @@ INDEXES: list[IndexSpec] = [
         name="tenants__name_unique",
         unique=True,
     ),
-
     # =======================================================================
     # api_keys — hashed bearer credentials
     # =======================================================================
@@ -134,7 +135,6 @@ INDEXES: list[IndexSpec] = [
         name="api_keys__tenant_hash_active",
         partial_filter_expression={"revoked_at": None},
     ),
-
     # =======================================================================
     # categories — user-curated trend topics
     # =======================================================================
@@ -152,7 +152,6 @@ INDEXES: list[IndexSpec] = [
         name="categories__tenant_name_unique",
         unique=True,
     ),
-
     # =======================================================================
     # sources — URLs/feeds registered under categories
     # =======================================================================
@@ -175,7 +174,6 @@ INDEXES: list[IndexSpec] = [
         name="sources__tenant_url_hash_unique",
         unique=True,
     ),
-
     # =======================================================================
     # jobs — execution metadata (introduced Phase 4; expanded here)
     # =======================================================================
@@ -218,7 +216,6 @@ INDEXES: list[IndexSpec] = [
         name="jobs__ttl_created",
         expire_after_seconds=_TTL_90_DAYS,
     ),
-
     # =======================================================================
     # idempotency — at-least-once safety net
     # =======================================================================
@@ -232,7 +229,6 @@ INDEXES: list[IndexSpec] = [
         # TTL deadline.
         expire_after_seconds=0,
     ),
-
     # =======================================================================
     # raw_documents — ingested content metadata (real text in MinIO)
     # =======================================================================
@@ -263,7 +259,6 @@ INDEXES: list[IndexSpec] = [
         name="raw_documents__ttl_created",
         expire_after_seconds=_TTL_365_DAYS,
     ),
-
     # =======================================================================
     # chunks — retrieval metadata
     # =======================================================================
@@ -293,7 +288,6 @@ INDEXES: list[IndexSpec] = [
         name="chunks__ttl_created",
         expire_after_seconds=_TTL_365_DAYS,
     ),
-
     # =======================================================================
     # analyses — LLM-generated insights
     # =======================================================================
@@ -312,7 +306,6 @@ INDEXES: list[IndexSpec] = [
         name="analyses__ttl_created",
         expire_after_seconds=_TTL_365_DAYS,
     ),
-
     # =======================================================================
     # reports — generated reports metadata (blobs in MinIO)
     # =======================================================================
@@ -327,7 +320,6 @@ INDEXES: list[IndexSpec] = [
         name="reports__ttl_created",
         expire_after_seconds=_TTL_365_DAYS,
     ),
-
     # =======================================================================
     # evaluations — production eval results from the 1% sampling pipeline
     # =======================================================================
@@ -357,7 +349,6 @@ INDEXES: list[IndexSpec] = [
         name="evaluations__ttl_created",
         expire_after_seconds=_TTL_365_DAYS,
     ),
-
     # =======================================================================
     # cost_ledger — append-only LLM billing events
     # =======================================================================
@@ -383,7 +374,6 @@ INDEXES: list[IndexSpec] = [
         name="cost_ledger__ttl_created",
         expire_after_seconds=_TTL_90_DAYS,
     ),
-
     # =======================================================================
     # outbox — pending Kafka publishes (written inside Mongo transactions)
     # =======================================================================
@@ -406,7 +396,6 @@ INDEXES: list[IndexSpec] = [
         name="outbox__ttl_published",
         expire_after_seconds=7 * _SECONDS_PER_DAY,
     ),
-
     # =======================================================================
     # audit_log — append-only security event records (Phase 13)
     # =======================================================================
@@ -429,7 +418,6 @@ INDEXES: list[IndexSpec] = [
         name="audit_log__ttl_created",
         expire_after_seconds=_TTL_365_DAYS,
     ),
-
     # =======================================================================
     # url_blocklists — per-tenant SSRF blocking rules (Phase 13)
     # =======================================================================
@@ -446,7 +434,6 @@ INDEXES: list[IndexSpec] = [
         name="url_blocklists__tenant_pattern_unique",
         unique=True,
     ),
-
     # =======================================================================
     # reviews — HITL review queue (Phase 13.5)
     # =======================================================================
@@ -485,7 +472,6 @@ INDEXES: list[IndexSpec] = [
         name="reviews__ttl_created",
         expire_after_seconds=_TTL_365_DAYS,
     ),
-
     # =======================================================================
     # tenant_settings — per-tenant operational config (Phase 13.5)
     # =======================================================================
@@ -551,6 +537,13 @@ INDEXES: list[IndexSpec] = [
         collection=Collection.MEMORIES,
         keys=[("content", TEXT)],  # type: ignore[list-item]
         name="memories__content_bm25",
+    ),
+    # Staleness detection — find least-recently-referenced active memories.
+    IndexSpec(
+        collection=Collection.MEMORIES,
+        keys=[("tenant_id", ASCENDING), ("last_referenced_at", ASCENDING)],
+        name="memories__tenant_last_referenced",
+        sparse=True,
     ),
 ]
 

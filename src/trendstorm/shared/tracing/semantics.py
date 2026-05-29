@@ -21,6 +21,7 @@ Usage:
     }):
         ...
 """
+
 from __future__ import annotations
 
 
@@ -49,12 +50,12 @@ class Attr:
     # ------------------------------------------------------------------ #
     # Scout / ingestion
     # ------------------------------------------------------------------ #
-    HTTP_URL = "http.url"                    # reuses OTel semconv key
-    HTTP_STATUS_CODE = "http.status_code"    # reuses OTel semconv key
+    HTTP_URL = "http.url"  # reuses OTel semconv key
+    HTTP_STATUS_CODE = "http.status_code"  # reuses OTel semconv key
     CONTENT_TYPE = "trendstorm.content_type"
     BYTES_FETCHED = "trendstorm.bytes_fetched"
     SOURCE_HOST = "trendstorm.source_host"
-    PARSE_RESULT = "trendstorm.parse_result"   # "ok" | "empty" | "error"
+    PARSE_RESULT = "trendstorm.parse_result"  # "ok" | "empty" | "error"
 
     # ------------------------------------------------------------------ #
     # Knowledge / embedding
@@ -85,7 +86,7 @@ class Attr:
     # ------------------------------------------------------------------ #
     MODEL_ID = "trendstorm.model_id"
     MODEL_PROVIDER = "trendstorm.model_provider"
-    OPERATION = "trendstorm.operation"        # "analyst_chat" | "validator_chat" | etc.
+    OPERATION = "trendstorm.operation"  # "analyst_chat" | "validator_chat" | etc.
     INPUT_TOKENS = "trendstorm.input_tokens"
     OUTPUT_TOKENS = "trendstorm.output_tokens"
     CACHED_TOKENS = "trendstorm.cached_tokens"
@@ -96,7 +97,7 @@ class Attr:
     # ------------------------------------------------------------------ #
     # Publisher
     # ------------------------------------------------------------------ #
-    REPORT_FORMAT = "trendstorm.report_format"   # "md" | "json" | "pdf"
+    REPORT_FORMAT = "trendstorm.report_format"  # "md" | "json" | "pdf"
     REPORT_BYTES = "trendstorm.report_bytes"
     PDF_SUCCESS = "trendstorm.pdf_success"
 
@@ -130,9 +131,9 @@ class Attr:
     # Long-term memory (Phase 15.5)
     # ------------------------------------------------------------------ #
     MEMORY_ID = "trendstorm.memory_id"
-    MEMORY_KIND = "trendstorm.memory_kind"           # "semantic" | "episodic"
+    MEMORY_KIND = "trendstorm.memory_kind"  # "semantic" | "episodic"
     MEMORY_CONFIDENCE = "trendstorm.memory_confidence"
     MEMORY_SUPERSEDED_BY = "trendstorm.memory_superseded_by"
-    MEMORY_COLLECTION = "trendstorm.memory_collection"   # ChromaDB collection name
-    MEMORY_HITS = "trendstorm.memory_hits"           # count returned by retriever
+    MEMORY_COLLECTION = "trendstorm.memory_collection"  # ChromaDB collection name
+    MEMORY_HITS = "trendstorm.memory_hits"  # count returned by retriever
     MEMORY_WRITE_COUNT = "trendstorm.memory_write_count"  # count written per job

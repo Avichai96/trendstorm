@@ -16,6 +16,7 @@ Protocol vs ABC:
     HybridRetriever to verify that concrete implementations satisfy the interface
     structurally. No inheritance required in concrete classes.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
@@ -45,16 +46,14 @@ class BM25Retriever(Protocol):
     HybridRetriever's constructor enforce correct wiring.
     """
 
-    async def retrieve(self, request: RetrievalRequest) -> list[RetrievedChunk]:
-        ...
+    async def retrieve(self, request: RetrievalRequest) -> list[RetrievedChunk]: ...
 
 
 @runtime_checkable
 class VectorRetriever(Protocol):
     """Structural tag for dense-vector (ChromaDB cosine) retrieval implementations."""
 
-    async def retrieve(self, request: RetrievalRequest) -> list[RetrievedChunk]:
-        ...
+    async def retrieve(self, request: RetrievalRequest) -> list[RetrievedChunk]: ...
 
 
 @runtime_checkable

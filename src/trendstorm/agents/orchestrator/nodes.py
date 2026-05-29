@@ -21,6 +21,7 @@ Phases 5-9 replace each stub with a real implementation:
     Phase 8: retrieve_node + analyze_node use hybrid RAG.
     Phase 9: publish_node renders the report.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -72,6 +73,7 @@ _FAIL_PROB = float(os.getenv("TRENDSTORM_STUB_FAIL_PROB", "0.0"))
 # Helpers
 # ===========================================================================
 
+
 def _increment_attempt(state: JobState, stage: Stage) -> int:
     """Bump and return the attempt counter for a stage."""
     n = state.attempts.get(stage, 0) + 1
@@ -83,9 +85,7 @@ def _record_transition(state: JobState, to_stage: Stage) -> dict[str, Any]:
     if not is_valid_transition(state.stage, to_stage):
         # Programming error — log and fail-fast in dev. In prod we'd want
         # to mark the job failed rather than crash the worker.
-        raise ValueError(
-            f"Invalid transition: {state.stage.value} -> {to_stage.value}"
-        )
+        raise ValueError(f"Invalid transition: {state.stage.value} -> {to_stage.value}")
     return {"stage": to_stage}
 
 
@@ -102,6 +102,7 @@ async def _maybe_fail(stage: Stage) -> None:
 # Node: init_job  — first node, marks job as INGESTING
 # ===========================================================================
 
+
 async def init_job(state: JobState) -> dict[str, Any]:
     """Transition PENDING -> INGESTING and set up the job for ingestion.
 
@@ -117,6 +118,7 @@ async def init_job(state: JobState) -> dict[str, Any]:
 # ===========================================================================
 # Node: ingest  — publishes IngestPendingEvent; graph pauses via interrupt_after.
 # ===========================================================================
+
 
 async def ingest_node(state: JobState, config: RunnableConfig) -> dict[str, Any]:
     """Publish IngestPendingEvent then let the graph pause (interrupt_after).
@@ -189,6 +191,7 @@ async def ingest_node(state: JobState, config: RunnableConfig) -> dict[str, Any]
 # ===========================================================================
 # Node: embed  — Phase 7 dual-mode (Kafka handoff in production, stub in tests)
 # ===========================================================================
+
 
 def _blob_uri_text(blob_uri_raw: str | None) -> str | None:
     """Derive the extracted-text blob URI from the raw blob URI.
@@ -297,6 +300,7 @@ async def embed_node(state: JobState, config: RunnableConfig) -> dict[str, Any]:
 # forward to analyze_node.
 # ===========================================================================
 
+
 async def retrieve_node(state: JobState, config: RunnableConfig) -> dict[str, Any]:
     """Pass-through in production; synthetic chunks in unit-test stub mode.
 
@@ -337,13 +341,16 @@ async def retrieve_node(state: JobState, config: RunnableConfig) -> dict[str, An
         # Stub: synthetic retrieval (unit test compatibility).
         await _maybe_fail(Stage.RETRIEVING)
         await asyncio.sleep(0.1)
-        retrieved = [c.id for c in state.knowledge.chunk_refs[: max(1, len(state.knowledge.chunk_refs) // 2)]]
+        retrieved = [
+            c.id for c in state.knowledge.chunk_refs[: max(1, len(state.knowledge.chunk_refs) // 2)]
+        ]
         return {
             "attempts": {**state.attempts, Stage.RETRIEVING: attempt},
             "retrieval": RetrievalState(
                 retrieved_chunk_ids=retrieved,
                 query="stub query",
-                refinement_count=state.retrieval.refinement_count + (1 if state.refinement_loops > 0 else 0),
+                refinement_count=state.retrieval.refinement_count
+                + (1 if state.refinement_loops > 0 else 0),
             ),
             **_record_transition(state, Stage.ANALYZING),
         }
@@ -352,6 +359,7 @@ async def retrieve_node(state: JobState, config: RunnableConfig) -> dict[str, An
 # ===========================================================================
 # Node: analyze  — Phase 8 dual-mode (Kafka handoff in production, stub tests)
 # ===========================================================================
+
 
 async def analyze_node(state: JobState, config: RunnableConfig) -> dict[str, Any]:
     """Delegate the analysis pass to the analyst worker via Kafka.
@@ -398,7 +406,7 @@ async def analyze_node(state: JobState, config: RunnableConfig) -> dict[str, Any
                 job_id=state.job_id,
                 category_id=state.category_id,
                 refinement_loop=state.refinement_loops,
-                refinement_notes=None,   # Initial pass — no validator feedback yet
+                refinement_notes=None,  # Initial pass — no validator feedback yet
             )
             await kafka_producer.send_and_wait(
                 Topic.ANALYSIS_PENDING.value,
@@ -434,6 +442,7 @@ async def analyze_node(state: JobState, config: RunnableConfig) -> dict[str, Any
 # Node: refine  — increments refinement counter before looping back to retrieve.
 # ===========================================================================
 
+
 async def refine_node(state: JobState) -> dict[str, Any]:
     """Increment refinement loop counter and prepare for re-retrieval."""
     with tracer.start_as_current_span("orchestrator.refine"):
@@ -453,6 +462,7 @@ async def refine_node(state: JobState) -> dict[str, Any]:
 # ===========================================================================
 # Node: publish  — Phase 9 dual-mode (Kafka handoff in production, stub tests)
 # ===========================================================================
+
 
 async def publish_node(state: JobState, config: RunnableConfig) -> dict[str, Any]:
     """Delegate rendering to the publisher worker via Kafka.
@@ -516,6 +526,7 @@ async def publish_node(state: JobState, config: RunnableConfig) -> dict[str, Any
 # Node: review_gate  — HITL pass-through or pause for human review (Phase 13.5)
 # ===========================================================================
 
+
 async def review_gate_node(state: JobState, config: RunnableConfig) -> dict[str, Any]:
     """Gate analysis to human review or pass it directly to publishing.
 
@@ -567,6 +578,7 @@ async def review_gate_node(state: JobState, config: RunnableConfig) -> dict[str,
         score = state.analysis.validation_score
         loops = state.refinement_loops
         from trendstorm.agents.state import MAX_REFINEMENT_LOOPS
+
         budget_exhausted = loops >= MAX_REFINEMENT_LOOPS
 
         should_gate = (
@@ -581,11 +593,21 @@ async def review_gate_node(state: JobState, config: RunnableConfig) -> dict[str,
         # --- Gate: create review record and publish event.
         from datetime import UTC, datetime, timedelta
 
+        from trendstorm_shared import FlaggingReason
+
         from trendstorm.domain.reviews.models import ReviewRequest
         from trendstorm.orchestration.events import ReviewRequestedEvent
 
         timeout_hours = tenant_settings.hitl_timeout_hours
         timeout_at = datetime.now(UTC) + timedelta(hours=timeout_hours)
+
+        # Determine why this review was flagged.
+        if tenant_settings.hitl_mode.value == "always":
+            flagging_reason = FlaggingReason.ALWAYS_MODE
+        elif budget_exhausted:
+            flagging_reason = FlaggingReason.REFINEMENT_BUDGET_EXHAUSTED
+        else:
+            flagging_reason = FlaggingReason.LOW_VALIDATOR_SCORE
 
         review = ReviewRequest(
             tenant_id=state.tenant_id,
@@ -594,6 +616,10 @@ async def review_gate_node(state: JobState, config: RunnableConfig) -> dict[str,
             stage_under_review=state.stage.value,
             timeout_at=timeout_at,
             sla_seconds=timeout_hours * 3600,
+            validator_score=score,
+            refinement_loops_used=loops,
+            cost_usd_so_far_cents=0,  # TODO: wire cost ledger into node context
+            flagging_reason=flagging_reason,
         )
 
         review_repo = config.get("configurable", {}).get("review_repo")
@@ -608,6 +634,7 @@ async def review_gate_node(state: JobState, config: RunnableConfig) -> dict[str,
             )
 
         from opentelemetry.propagate import inject
+
         otel_carrier: dict[str, str] = {}
         inject(otel_carrier)
 
@@ -642,6 +669,7 @@ async def review_gate_node(state: JobState, config: RunnableConfig) -> dict[str,
 # ===========================================================================
 # Node: memory_consolidation  — Phase 15.5: episodic + semantic memory write.
 # ===========================================================================
+
 
 async def memory_consolidation_node(state: JobState, config: RunnableConfig) -> dict[str, Any]:
     """Publish MemoryPendingEvent for the memory-consolidation worker.
@@ -711,6 +739,7 @@ async def memory_consolidation_node(state: JobState, config: RunnableConfig) -> 
 # ===========================================================================
 # Node: fail  — records the failure on state and transitions to FAILED.
 # ===========================================================================
+
 
 async def fail_node(state: JobState) -> dict[str, Any]:
     """Terminal failure node. Marks the job FAILED with last-error context."""

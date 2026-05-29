@@ -10,6 +10,12 @@ export const sourceKeys = {
 export const sourcesByCategoryOptions = (categoryId: string) =>
   queryOptions({
     queryKey: sourceKeys.byCategory(categoryId),
-    queryFn: () => api.get<Page<Source>>("/v1/sources", { category_id: categoryId, limit: 100 }),
+    queryFn: async () => {
+      const resp = await api.get<{ sources: Source[] }>("/v1/sources", {
+        category_id: categoryId,
+        limit: 100,
+      });
+      return { items: resp.sources, next_cursor: null } satisfies Page<Source>;
+    },
     enabled: !!categoryId,
   });

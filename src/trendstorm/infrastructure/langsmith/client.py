@@ -18,6 +18,7 @@ All write methods (push_eval_results) are fire-and-forget: failures are
 logged as warnings, not raised, so evaluation pipeline crashes do not prevent
 on-disk artifact writes.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -98,7 +99,9 @@ class LangSmithClient:
             examples = list(self._client.list_examples(dataset_name=dataset_name))
             return [e.dict() if hasattr(e, "dict") else vars(e) for e in examples]
         except Exception as exc:
-            logger.warning("langsmith.list_examples_failed", dataset_name=dataset_name, error=str(exc))
+            logger.warning(
+                "langsmith.list_examples_failed", dataset_name=dataset_name, error=str(exc)
+            )
             return []
 
     # ------------------------------------------------------------------

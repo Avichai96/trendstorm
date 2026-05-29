@@ -21,6 +21,7 @@ Parent expansion:
     parents). Cost is proportional to final_k, not to the candidate pool size,
     because expansion happens AFTER reranking.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -101,7 +102,9 @@ class HybridRetriever:
                 request.query,
                 count=self._settings.query_expansion_count,
             )
-        logger.debug("hybrid_sub_queries", count=len(sub_queries), queries=[q[:80] for q in sub_queries])
+        logger.debug(
+            "hybrid_sub_queries", count=len(sub_queries), queries=[q[:80] for q in sub_queries]
+        )
 
         # ------------------------------------------------------------------ #
         # 2. Concurrent retrieval — BM25 + vector per sub-query
@@ -241,16 +244,12 @@ class HybridRetriever:
             return chunks
 
         # First batch: fetch the final chunks to learn their parent_chunk_id.
-        chunk_docs = await self._chunk_repo.get_many(
-            tenant_id, [c.chunk_id for c in chunks]
-        )
+        chunk_docs = await self._chunk_repo.get_many(tenant_id, [c.chunk_id for c in chunks])
         doc_map = {d.id: d for d in chunk_docs}
 
-        parent_ids = list({
-            d.parent_chunk_id
-            for d in doc_map.values()
-            if d.parent_chunk_id is not None
-        })
+        parent_ids = list(
+            {d.parent_chunk_id for d in doc_map.values() if d.parent_chunk_id is not None}
+        )
 
         parent_map: dict[str, str] = {}  # parent_id → parent text
         if parent_ids:

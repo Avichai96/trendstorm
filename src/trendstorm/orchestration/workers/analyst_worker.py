@@ -31,6 +31,7 @@ Failure semantics:
 Run:
     python -m trendstorm.orchestration.workers.analyst_worker
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -150,13 +151,11 @@ class AnalystWorker(BaseConsumer):
         ):
             await self._run_pass(event)
 
-    def _record_handle_metrics(
-        self, event: EventEnvelope, status: str, elapsed: float
-    ) -> None:
+    def _record_handle_metrics(self, event: EventEnvelope, status: str, elapsed: float) -> None:
         METRICS.analyst_passes.labels(tenant_id=event.tenant_id, status=status).inc()
-        METRICS.analyst_pass_duration.labels(
-            tenant_id=event.tenant_id, status=status
-        ).observe(elapsed)
+        METRICS.analyst_pass_duration.labels(tenant_id=event.tenant_id, status=status).observe(
+            elapsed
+        )
 
     async def _run_pass(self, event: AnalysisPendingEvent) -> None:
         """One Analyst pass. Persists, then publishes completion."""
@@ -324,9 +323,7 @@ class AnalystWorker(BaseConsumer):
     # Retry routing — same tiered topology as Scout / Knowledge
     # ------------------------------------------------------------------ #
 
-    async def _handle_failure(
-        self, event: EventEnvelope, error: TrendStormError
-    ) -> None:
+    async def _handle_failure(self, event: EventEnvelope, error: TrendStormError) -> None:
         if not isinstance(event, AnalysisPendingEvent):
             await super()._handle_failure(event, error)
             return
@@ -335,9 +332,7 @@ class AnalystWorker(BaseConsumer):
         retry_index = attempt - 1
         if retry_index < len(_RETRY_TOPICS):
             retry_topic = _RETRY_TOPICS[retry_index]
-            retry_event = event.model_copy(
-                update={"attempt": attempt + 1, "event_id": new_id()}
-            )
+            retry_event = event.model_copy(update={"attempt": attempt + 1, "event_id": new_id()})
             try:
                 await self._producer.producer.send_and_wait(
                     retry_topic.value,
@@ -372,6 +367,7 @@ class AnalystWorker(BaseConsumer):
 # ===========================================================================
 # Process entry point
 # ===========================================================================
+
 
 async def run_worker() -> None:
     """Start the analyst worker process, blocking until shutdown signal."""

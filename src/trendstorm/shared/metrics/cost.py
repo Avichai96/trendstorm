@@ -14,6 +14,7 @@ Why separate from the metrics registry?
     construct label dicts manually. The function owns the label mapping
     logic so call sites stay clean.
 """
+
 from __future__ import annotations
 
 import asyncio

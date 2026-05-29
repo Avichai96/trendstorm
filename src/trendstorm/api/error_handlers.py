@@ -17,6 +17,7 @@ Why centralize?
     - One place to add things like Sentry reporting, error metrics, etc.
     - Consistent shape across the entire API.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -50,6 +51,7 @@ def _envelope(error: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Per-exception-type handlers
 # ---------------------------------------------------------------------------
+
 
 async def domain_error_handler(_: Request, exc: TrendStormError) -> JSONResponse:
     """Map TrendStormError subclasses to appropriate HTTP statuses."""
@@ -88,26 +90,28 @@ async def http_exception_handler(_: Request, exc: HTTPException) -> JSONResponse
     """Handle FastAPI's HTTPException (raised by us or by FastAPI internals)."""
     return JSONResponse(
         status_code=exc.status_code,
-        content=_envelope({
-            "code": "http_error",
-            "message": str(exc.detail),
-            "context": {},
-        }),
+        content=_envelope(
+            {
+                "code": "http_error",
+                "message": str(exc.detail),
+                "context": {},
+            }
+        ),
         headers=exc.headers,
     )
 
 
-async def validation_exception_handler(
-    _: Request, exc: RequestValidationError
-) -> JSONResponse:
+async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
     """Pydantic input validation errors → 422 with structured field errors."""
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        content=_envelope({
-            "code": "validation_error",
-            "message": "Request validation failed.",
-            "context": {"errors": exc.errors()},
-        }),
+        content=_envelope(
+            {
+                "code": "validation_error",
+                "message": "Request validation failed.",
+                "context": {"errors": exc.errors()},
+            }
+        ),
     )
 
 
@@ -123,17 +127,20 @@ async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONRespons
     )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=_envelope({
-            "code": "internal_error",
-            "message": "An internal error occurred.",
-            "context": {},
-        }),
+        content=_envelope(
+            {
+                "code": "internal_error",
+                "message": "An internal error occurred.",
+                "context": {},
+            }
+        ),
     )
 
 
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
+
 
 def install_exception_handlers(app: FastAPI) -> None:
     """Register all exception handlers on the app.

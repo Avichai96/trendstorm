@@ -16,6 +16,7 @@ Usage (in Scout fetcher):
     await check_tenant_blocklist(hostname, url,   # same
         tenant_id=t, repo=blocklist_repo)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -34,7 +35,9 @@ logger = get_logger(__name__)
 
 _BLOCKLIST_PATH = (
     pathlib.Path(__file__).parent.parent.parent.parent.parent.parent
-    / "ops" / "security" / "global-blocklist.txt"
+    / "ops"
+    / "security"
+    / "global-blocklist.txt"
 )
 
 _GLOBAL_DOMAINS: frozenset[str] = frozenset()
@@ -111,6 +114,7 @@ async def check_tenant_blocklist(
         url: The full URL (used in the error context).
         tenant_id: The tenant scope for the blocklist lookup.
         repo: A UrlBlocklistRepository instance (duck-typed to avoid circular import).
+
     """
     domains, suffixes = await _get_tenant_lists(tenant_id, repo)
     lower = hostname.lower()
@@ -129,9 +133,7 @@ async def check_tenant_blocklist(
             )
 
 
-async def _get_tenant_lists(
-    tenant_id: str, repo: object
-) -> tuple[frozenset[str], frozenset[str]]:
+async def _get_tenant_lists(tenant_id: str, repo: object) -> tuple[frozenset[str], frozenset[str]]:
     now = time.monotonic()
     cached = _TENANT_CACHE.get(tenant_id)
     if cached is not None and now - cached[0] < _CACHE_TTL:

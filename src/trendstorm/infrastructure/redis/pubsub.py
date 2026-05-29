@@ -18,6 +18,7 @@ Why not use Kafka directly from the SSE endpoint?
     Durability is handled by Redis Streams (XADD side) — Pub/Sub is just
     the live-notification layer on top.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -180,7 +181,7 @@ class _PubSubIterator:
             try:
                 await self._pubsub.unsubscribe(self._channel)
                 await self._pubsub.aclose()
-            except Exception:  # noqa: S110  # best-effort cleanup; finally block clears state
+            except Exception:  # best-effort cleanup; finally block clears state
                 pass
             finally:
                 self._pubsub = None

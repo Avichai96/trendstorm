@@ -17,6 +17,7 @@ Prometheus alert:
     `PendingReviewsAgingHigh` fires when the oldest pending review is within
     80% of its SLA window — this covers the sweeper being down or lagging.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -24,7 +25,6 @@ import signal
 
 from opentelemetry.propagate import inject
 
-from trendstorm.domain.reviews.models import ReviewStatus
 from trendstorm.infrastructure.kafka.producer import KafkaProducerClient
 from trendstorm.infrastructure.metrics.prometheus_server import MetricsServer
 from trendstorm.infrastructure.mongo.client import MongoClient
@@ -73,7 +73,7 @@ class ReviewTimeoutSweeper:
 
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=self._poll_interval)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass  # normal — timeout means poll again
 
         logger.info("review_timeout_sweeper.stopped")
@@ -88,11 +88,11 @@ class ReviewTimeoutSweeper:
 
         for review in expired:
             try:
-                updated = await self._reviews.mark_timed_out(review.tenant_id, review.id)
-                if updated is None:
-                    # Concurrently resolved — skip.
-                    continue
-
+                # Publish Kafka FIRST so the orchestrator can resume even if the
+                # subsequent Mongo write fails. The orchestrator consumer is
+                # idempotent on (review_id, decision), so a rare double-publish
+                # on retry is safe. The alternative (Mongo first) leaves the job
+                # stuck in AWAITING_REVIEW if Kafka is temporarily unavailable.
                 otel_carrier: dict[str, str] = {}
                 inject(otel_carrier)
                 event = ReviewResolvedEvent(
@@ -110,6 +110,17 @@ class ReviewTimeoutSweeper:
                     value=event.model_dump_json().encode(),
                     key=review.job_id.encode(),
                 )
+
+                # Mongo write second — safe because the orchestrator consumer
+                # deduplicates by review_id if it sees the event again.
+                updated = await self._reviews.mark_timed_out(review.tenant_id, review.id)
+                if updated is None:
+                    # Concurrently resolved between list_expired_pending and now.
+                    logger.info(
+                        "review_timeout_sweeper.already_resolved",
+                        review_id=review.id,
+                        job_id=review.job_id,
+                    )
 
                 METRICS.review_timeout_total.inc()
                 logger.warning(
@@ -164,6 +175,7 @@ class ReviewTimeoutWorker:
 # Process entry point
 # ===========================================================================
 
+
 async def run_worker() -> None:
     settings = get_settings()
     configure_logging()
@@ -197,7 +209,7 @@ async def run_worker() -> None:
         await worker.run()
     finally:
         await producer.stop()
-        await mongo.disconnect()
+        await mongo.close()
         shutdown_tracing()
 
 

@@ -4,8 +4,8 @@ import type { JobStatus } from "@/api/types.generated";
 import { cn } from "@/lib/utils";
 
 const STAGES: JobStatus[] = [
-  "pending", "ingesting", "ingested", "embedding", "embedded",
-  "retrieving", "analyzing", "awaiting_review", "publishing", "completed",
+  "pending", "ingesting", "embedding", "retrieving",
+  "analyzing", "awaiting_review", "publishing", "memory_consolidation", "completed",
 ];
 
 function stageIndex(status: JobStatus): number {
@@ -13,7 +13,7 @@ function stageIndex(status: JobStatus): number {
   return idx >= 0 ? idx : 0;
 }
 
-export function PipelineProgress({ status, refinementLoops }: { status: JobStatus; refinementLoops: number }) {
+export function PipelineProgress({ status, refinementLoops = 0 }: { status: JobStatus; refinementLoops?: number }) {
   const isTerminal = ["completed", "failed", "cancelled", "rejected"].includes(status);
   const pct = isTerminal && status === "completed"
     ? 100

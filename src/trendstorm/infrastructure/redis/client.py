@@ -11,6 +11,7 @@ Use cases:
 Note: redis-py's asyncio client uses a connection pool internally;
 we don't need explicit pooling on top.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

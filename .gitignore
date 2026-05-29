@@ -30,7 +30,9 @@ build/
 .ruff_cache/
 .coverage
 coverage.xml
+coverage.json
 htmlcov/
+*.zip
 
 # --- IDE ---
 .idea/

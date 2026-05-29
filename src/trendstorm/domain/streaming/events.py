@@ -9,6 +9,7 @@ Every event carries a ULID event_id (global dedup key) and a job-scoped
 monotonic seq (Last-Event-ID for SSE resumption). seq is assigned by the
 SSE Coordinator — workers do not set it.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -32,20 +33,20 @@ class StreamEventType(StrEnum):
     PROGRESS = "progress"
 
     # Analyst-specific events
-    PARTIAL_TEXT = "partial_text"       # streaming summary token(s)
-    CITATION_ADDED = "citation_added"   # one Insight resolved
+    PARTIAL_TEXT = "partial_text"  # streaming summary token(s)
+    CITATION_ADDED = "citation_added"  # one Insight resolved
 
     # Terminal events — SSE endpoint closes stream on these
-    REPORT_READY = "report_ready"       # Publisher finished, Report persisted
-    JOB_FAILED = "job_failed"           # unrecoverable failure
-    JOB_REJECTED = "job_rejected"       # HITL reviewer declined the analysis
+    REPORT_READY = "report_ready"  # Publisher finished, Report persisted
+    JOB_FAILED = "job_failed"  # unrecoverable failure
+    JOB_REJECTED = "job_rejected"  # HITL reviewer declined the analysis
 
     # HITL review events (Phase 13.5)
     REVIEW_REQUIRED = "review_required"  # analysis paused, awaiting human decision
     REVIEW_RESOLVED = "review_resolved"  # reviewer (or sweeper) made a decision
 
     # Infrastructure
-    HEARTBEAT = "heartbeat"             # SSE comment — client never sees this as data
+    HEARTBEAT = "heartbeat"  # SSE comment — client never sees this as data
 
     @property
     def is_terminal(self) -> bool:
@@ -81,9 +82,7 @@ class StreamEvent(BaseModel):
     seq: int = Field(default=0, ge=0)
     stage: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
-    occurred_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC)
-    )
+    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     def with_seq(self, seq: int) -> StreamEvent:
         """Return a copy stamped with the coordinator-assigned seq number."""

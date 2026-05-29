@@ -15,6 +15,7 @@ Why asyncio.gather over sequential calls?
     each, the panel wall-clock time drops from ~6s to ~2s. Failures are still
     isolated per judge via return_exceptions=True.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -180,4 +181,3 @@ class LLMPanel:
                 n_judges=len(self._judges),
                 n_valid=n_valid,
             )
-

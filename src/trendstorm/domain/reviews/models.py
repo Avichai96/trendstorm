@@ -14,12 +14,14 @@ Status lifecycle:
 The decision_comment is forwarded to the next AnalysisPendingEvent as
 refinement_notes when decision is REFINEMENT_REQUESTED.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
+from trendstorm_shared import FlaggingReason
 
 from trendstorm.shared.ids import new_id
 
@@ -51,15 +53,21 @@ class ReviewRequest(BaseModel):
     tenant_id: str
     job_id: str
     analysis_id: str
-    stage_under_review: str          # Stage value at review creation time
+    stage_under_review: str  # Stage value at review creation time
     status: ReviewStatus = ReviewStatus.PENDING
-    reviewer_id: str | None = None   # key_id or subject of the resolving principal
+    reviewer_id: str | None = None  # key_id or subject of the resolving principal
     decision_comment: str | None = None
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     resolved_at: datetime | None = None
-    timeout_at: datetime             # absolute UTC deadline; sweeper fires here
-    sla_seconds: int                 # timeout window in seconds (stored for audit)
+    timeout_at: datetime  # absolute UTC deadline; sweeper fires here
+    sla_seconds: int  # timeout window in seconds (stored for audit)
+
+    # Populated by review_gate_node at creation time (Phase 15.6)
+    validator_score: float | None = None
+    refinement_loops_used: int = 0
+    cost_usd_so_far_cents: int = 0  # integer cents; avoids float decimal issues
+    flagging_reason: FlaggingReason | None = None
 
     @property
     def is_expired(self) -> bool:

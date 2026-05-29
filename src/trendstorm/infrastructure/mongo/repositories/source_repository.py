@@ -1,4 +1,5 @@
 """MongoDB implementation of SourceRepository."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -81,7 +82,7 @@ class MongoSourceRepository(TenantScopedRepository[Source]):
         *,
         status: str,
         error: str | None = None,
-        fetched_at: object,    # datetime
+        fetched_at: object,  # datetime
     ) -> None:
         # We accept `object` in the protocol to avoid circular imports;
         # narrow to datetime here for type safety.

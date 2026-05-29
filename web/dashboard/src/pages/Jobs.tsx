@@ -6,7 +6,7 @@ import { JobStatusBadge } from "@/components/shared/StatusBadge";
 import { LoadMoreButton } from "@/components/shared/CursorPagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatRelative, formatCurrency } from "@/lib/utils";
+import { formatRelative } from "@/lib/utils";
 import type { JobStatus } from "@/api/types.generated";
 import { Briefcase } from "lucide-react";
 
@@ -61,22 +61,19 @@ export default function Jobs() {
             {jobs.map((job) => (
               <Link
                 key={job.id}
-                to={`/jobs/${job.job_id}`}
+                to={`/jobs/${job.id}`}
                 className="flex items-center justify-between px-4 py-3 hover:bg-accent"
               >
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <JobStatusBadge status={job.status} />
-                    {job.refinement_loops_used > 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        ({job.refinement_loops_used} refinement{job.refinement_loops_used > 1 ? "s" : ""})
-                      </span>
-                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground font-mono">{job.job_id}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{job.id.slice(0, 16)}…</p>
                 </div>
                 <div className="text-right space-y-1">
-                  <p className="text-sm font-medium">{formatCurrency(job.cost_usd)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {job.metrics.documents_ingested} docs / {job.metrics.chunks_created} chunks
+                  </p>
                   <p className="text-xs text-muted-foreground">{formatRelative(job.created_at)}</p>
                 </div>
               </Link>

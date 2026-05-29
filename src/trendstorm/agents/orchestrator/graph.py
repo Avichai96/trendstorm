@@ -13,6 +13,7 @@ Compile-time guarantees we get for free:
     - Conditional-edge functions are type-checked at registration time.
     - START and END are reserved sentinels; using them wrong fails fast.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

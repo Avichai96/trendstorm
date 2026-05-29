@@ -3,13 +3,18 @@
 CRUD-ish endpoints for trend categories. Note: there's no DELETE — only
 archive — because deletion would orphan jobs that referenced the category.
 """
+
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query, Request, status
-from pydantic import BaseModel, ConfigDict, Field
+from trendstorm_shared import (
+    CategoryListResponse,
+    CategoryResponse,
+    CreateCategoryRequest,
+    UpdateCategoryRequest,
+)
 
 from trendstorm.api.deps import MongoDep
 from trendstorm.domain.categories.models import Category
@@ -24,45 +29,8 @@ logger = get_logger(__name__)
 router = APIRouter(
     prefix="/v1/categories",
     tags=["categories"],
-    dependencies=[Depends(require_tenant)]
+    dependencies=[Depends(require_tenant)],
 )
-
-
-# --- Schemas -----------------------------------------------------------
-
-class CreateCategoryRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(..., min_length=1, max_length=120)
-    description: str | None = Field(default=None, max_length=2000)
-    keywords: list[str] = Field(default_factory=list)
-
-
-class UpdateCategoryRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    description: str | None = Field(default=None, max_length=2000)
-    keywords: list[str] | None = None
-    archived: bool | None = None
-
-
-class CategoryResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    name: str
-    description: str | None
-    keywords: list[str]
-    archived: bool
-    created_at: datetime
-    updated_at: datetime
-
-
-class CategoryListResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    categories: list[CategoryResponse]
-    next_cursor: str | None = None
 
 
 def _to_response(cat: Category) -> CategoryResponse:
@@ -79,6 +47,7 @@ def _to_response(cat: Category) -> CategoryResponse:
 
 # --- DI ----------------------------------------------------------------
 
+
 def get_category_service(mongo: MongoDep) -> CategoryService:
     repo = MongoCategoryRepository(mongo)
     return CategoryService(categories=repo)
@@ -88,6 +57,7 @@ CategoryServiceDep = Annotated[CategoryService, Depends(get_category_service)]
 
 
 # --- Endpoints ---------------------------------------------------------
+
 
 @router.post(
     "",
@@ -120,6 +90,7 @@ async def get_category(
 ) -> CategoryResponse:
     if not is_valid_id(category_id):
         from trendstorm.shared.errors import NotFoundError
+
         raise NotFoundError(f"Category {category_id} not found")
     category = await service.get_category(
         tenant_id=request.state.tenant_id,

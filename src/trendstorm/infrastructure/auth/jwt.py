@@ -17,6 +17,7 @@ Multiple IdP support:
   A token is valid if it passes verification against ANY configured IdP.
   This allows migration from one IdP to another without a hard cutover.
 """
+
 from __future__ import annotations
 
 import httpx

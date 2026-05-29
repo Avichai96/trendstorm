@@ -15,6 +15,7 @@ model_id format: "{provider}.{model_name}"
     Used by the vector store to name Chroma collections; swapping providers
     creates a new collection rather than silently mixing incompatible vectors.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable

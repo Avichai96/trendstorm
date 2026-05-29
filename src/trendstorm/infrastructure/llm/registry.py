@@ -7,6 +7,7 @@ build_chat_provider      — no retry wrapper (chat errors are surfaced immediat
 Extending: add a new LLMProvider enum value, a new case here, and a new
 concrete provider class. Nothing else needs to change.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

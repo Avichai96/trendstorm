@@ -13,6 +13,7 @@ Design notes:
 - GoldenExample and ExpectedAnalysis are loaded from eval/golden/ JSON files,
   not from Mongo. LangSmith is for the UI; git is the source of truth.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -27,6 +28,7 @@ from trendstorm.shared.ids import new_id
 # EvalDimension
 # ---------------------------------------------------------------------------
 
+
 class EvalDimension(StrEnum):
     """The four rubric dimensions scored per analysis.
 
@@ -36,15 +38,16 @@ class EvalDimension(StrEnum):
     COVERAGE         — expected insights from the golden example are present.
     """
 
-    FAITHFULNESS      = "faithfulness"
+    FAITHFULNESS = "faithfulness"
     CITATION_ACCURACY = "citation_accuracy"
-    RELEVANCE         = "relevance"
-    COVERAGE          = "coverage"
+    RELEVANCE = "relevance"
+    COVERAGE = "coverage"
 
 
 # ---------------------------------------------------------------------------
 # EvaluationResult
 # ---------------------------------------------------------------------------
+
 
 class DimensionScore(BaseModel):
     """Score for a single dimension from a single evaluator run."""
@@ -97,6 +100,7 @@ class EvaluationResult(BaseModel):
 # GoldenExample — git-versioned fixture
 # ---------------------------------------------------------------------------
 
+
 class ExpectedInsight(BaseModel):
     """One expected insight in a golden example.
 
@@ -108,7 +112,7 @@ class ExpectedInsight(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     claim: str
-    required: bool = True        # if True, missing this insight fails COVERAGE
+    required: bool = True  # if True, missing this insight fails COVERAGE
     keywords: list[str] = Field(default_factory=list)
 
 
@@ -175,6 +179,7 @@ class GoldenExample(BaseModel):
 # EvalRunReport
 # ---------------------------------------------------------------------------
 
+
 class DimensionSummary(BaseModel):
     """Aggregate stats for one dimension across all examples in a run."""
 
@@ -197,7 +202,7 @@ class EvalRunReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     run_id: str = Field(default_factory=new_id)
-    suite: str                          # "fast" | "full" | "production"
+    suite: str  # "fast" | "full" | "production"
     n_examples: int = Field(..., ge=0)
     n_passed: int = Field(..., ge=0)
     dimension_summaries: list[DimensionSummary] = Field(default_factory=list)

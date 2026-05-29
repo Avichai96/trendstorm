@@ -10,6 +10,7 @@ Strategy:
 ``retry_request`` is an async function that wraps any ``httpx.AsyncClient``
 request call. Resources call it instead of calling ``client.request`` directly.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -50,7 +51,7 @@ def _parse_retry_after(response: httpx.Response) -> float | None:
 
 def _backoff(attempt: int) -> float:
     """Exponential backoff: 1, 2, 4, 8 … capped at MAX_BACKOFF seconds."""
-    return min(_MAX_BACKOFF, 2.0 ** attempt)
+    return min(_MAX_BACKOFF, 2.0**attempt)
 
 
 async def retry_request(
@@ -73,16 +74,20 @@ async def retry_request(
         httpx.HTTPError: After all retries are exhausted.
         Any non-retryable ``httpx.Response`` is returned immediately.
     """
-    last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
             response = await fn()
         except (httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError) as exc:
-            last_exc = exc
             if attempt == max_retries:
                 raise
             delay = _backoff(attempt)
-            logger.debug("network error %s (attempt %d/%d) — retrying in %.1fs", exc, attempt + 1, max_retries + 1, delay)
+            logger.debug(
+                "network error %s (attempt %d/%d) — retrying in %.1fs",
+                exc,
+                attempt + 1,
+                max_retries + 1,
+                delay,
+            )
             await asyncio.sleep(delay)
             continue
 
@@ -96,8 +101,12 @@ async def retry_request(
 
         logger.debug(
             "%s %s → %d (attempt %d/%d) — retrying in %.1fs",
-            method, response.url, response.status_code,
-            attempt + 1, max_retries + 1, delay,
+            method,
+            response.url,
+            response.status_code,
+            attempt + 1,
+            max_retries + 1,
+            delay,
         )
         await asyncio.sleep(delay)
 

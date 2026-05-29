@@ -8,6 +8,7 @@ All queries are routed through `self._tenant_query()` from the mixin,
 guaranteeing tenant scope. Even a `get(tenant, job_id)` includes
 `tenant_id` in the filter — never just `_id`.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -66,7 +67,9 @@ class MongoJobRepository(TenantScopedRepository[Job]):
         terminal. Failure fields are set only when provided — leaving them
         unset is meaningful (vs explicitly clearing them).
         """
-        update: dict[str, dict[str, Any]] = {"$set": {"status": status.value, "updated_at": now_utc()}}
+        update: dict[str, dict[str, Any]] = {
+            "$set": {"status": status.value, "updated_at": now_utc()}
+        }
         if status.is_terminal:
             update["$set"]["completed_at"] = now_utc()
         if failure_code is not None:
@@ -75,9 +78,7 @@ class MongoJobRepository(TenantScopedRepository[Job]):
             update["$set"]["failure_message"] = failure_message
 
         try:
-            result = await self._coll.update_one(
-                self._tenant_query(tenant_id, _id=job_id), update
-            )
+            result = await self._coll.update_one(self._tenant_query(tenant_id, _id=job_id), update)
         except PyMongoError as e:
             raise_db_error(e, operation="update_status", job_id=job_id)
 
@@ -186,7 +187,7 @@ class MongoJobRepository(TenantScopedRepository[Job]):
                     "duration_seconds": {
                         "$divide": [
                             {"$subtract": ["$completed_at", "$created_at"]},
-                            1000,    # ms -> s
+                            1000,  # ms -> s
                         ]
                     }
                 }

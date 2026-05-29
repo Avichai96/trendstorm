@@ -15,6 +15,7 @@ implementation lives in `infrastructure/mongo/repositories/` so it can
 import Mongo. Services NEVER import the concrete class — only the protocol.
 This is the hexagonal architecture seam.
 """
+
 from __future__ import annotations
 
 from typing import Protocol

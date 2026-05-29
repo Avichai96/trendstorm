@@ -4,6 +4,7 @@ Loads the Analysis and Category from Mongo, delegates rendering and upload
 to PublisherService, and returns the PublishResult. Separates I/O wiring
 (repositories, config) from rendering logic (PublisherService).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

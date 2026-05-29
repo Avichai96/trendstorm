@@ -26,6 +26,7 @@ What the mixin DOES enforce:
     - `_tenant_query(tenant_id, **extra)` is the ONLY way to start a query.
       It guarantees `tenant_id` is in every filter — defense in depth.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
 # Time
 # ---------------------------------------------------------------------------
 
+
 def now_utc() -> datetime:
     """Return timezone-aware UTC now.
 
@@ -58,6 +60,7 @@ def now_utc() -> datetime:
 # ---------------------------------------------------------------------------
 # Document <-> model translation
 # ---------------------------------------------------------------------------
+
 
 def to_mongo_doc(model_dump: dict[str, Any]) -> dict[str, Any]:
     """Translate a Pydantic model_dump into a Mongo document.
@@ -84,6 +87,7 @@ def from_mongo_doc(doc: dict[str, Any]) -> dict[str, Any]:
 # Error mapping
 # ---------------------------------------------------------------------------
 
+
 def raise_on_dup_key(err: DuplicateKeyError, *, what: str) -> None:
     """Translate pymongo's DuplicateKeyError to our domain ConflictError."""
     raise ConflictError(
@@ -104,6 +108,7 @@ def raise_db_error(err: PyMongoError, *, operation: str, **context: Any) -> None
 # ---------------------------------------------------------------------------
 # Tenant-scoped repository mixin
 # ---------------------------------------------------------------------------
+
 
 class TenantScopedRepository[T: BaseModel]:
     """Mixin providing tenant-safe primitives for repositories.

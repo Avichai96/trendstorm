@@ -10,6 +10,7 @@ Three tightly coupled models:
 - `AuthContext` — ephemeral per-request result of auth verification. Lives
   only in `request.state`; never persisted to Mongo.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -58,9 +59,9 @@ class ApiKey(BaseModel):
 
     id: str = Field(default_factory=new_id)
     tenant_id: str
-    name: str                       # human label (e.g. "CI pipeline", "mobile app")
-    key_hash: str                   # SHA-256 hex of the plaintext key
-    key_prefix: str                 # first 8 chars of the random portion (for display)
+    name: str  # human label (e.g. "CI pipeline", "mobile app")
+    key_hash: str  # SHA-256 hex of the plaintext key
+    key_prefix: str  # first 8 chars of the random portion (for display)
     roles: list[str] = Field(default_factory=list)  # e.g. ["reviewer"]
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -89,7 +90,7 @@ class AuthContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tenant_id: str
-    key_id: str | None = None       # set when authenticated via API key
-    subject: str | None = None      # JWT `sub` claim when authenticated via JWT
-    source: AuthSource = "legacy"   # how auth was established
+    key_id: str | None = None  # set when authenticated via API key
+    subject: str | None = None  # JWT `sub` claim when authenticated via JWT
+    source: AuthSource = "legacy"  # how auth was established
     roles: list[str] = Field(default_factory=list)  # e.g. ["reviewer"]

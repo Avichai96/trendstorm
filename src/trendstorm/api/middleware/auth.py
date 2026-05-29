@@ -18,6 +18,7 @@ auth-enabled modes — auth_context.tenant_id IS the tenant.
 
 Public paths (health, docs) bypass all auth.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -38,11 +39,16 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_PUBLIC_PATHS = frozenset({
-    "/health/live", "/health/ready",
-    "/docs", "/openapi.json", "/redoc",
-    "/metrics",
-})
+_PUBLIC_PATHS = frozenset(
+    {
+        "/health/live",
+        "/health/ready",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/metrics",
+    }
+)
 
 _BEARER_PREFIX = "bearer "
 _TENANT_HEADER = "x-tenant-id"
@@ -51,7 +57,7 @@ _TENANT_HEADER = "x-tenant-id"
 def _bearer_token(request: Request) -> str | None:
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith(_BEARER_PREFIX):
-        return auth[len(_BEARER_PREFIX):]
+        return auth[len(_BEARER_PREFIX) :]
     return None
 
 
@@ -96,6 +102,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Refuse to start in production with auth disabled.
         from trendstorm.shared.config import AuthMode, Environment
+
         if settings.mode == AuthMode.DISABLED and app_env == Environment.PROD:
             raise RuntimeError(
                 "AUTH_MODE=disabled is forbidden in production (APP__ENV=prod). "
@@ -107,6 +114,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         from trendstorm.shared.config import AuthMode
+
         mode = self._settings.mode
         # Lazy read from app.state (set during lifespan startup).
         auth_svc = getattr(request.app.state, "auth_service", None)
@@ -179,6 +187,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     return _make_401(str(e), code="invalid_jwt")
 
         request.state.auth_context = ctx
-        request.state.tenant_id = ctx.tenant_id   # backward compat for existing routes
+        request.state.tenant_id = ctx.tenant_id  # backward compat for existing routes
         bind_context(tenant_id=ctx.tenant_id)
         return await call_next(request)

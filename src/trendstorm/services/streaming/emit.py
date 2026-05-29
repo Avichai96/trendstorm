@@ -21,6 +21,7 @@ Design:
     Errors are intentionally swallowed (best-effort): stream events are
     UX extras. A failure to emit a PROGRESS event must not fail the job.
 """
+
 from __future__ import annotations
 
 from opentelemetry import trace

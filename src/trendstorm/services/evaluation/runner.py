@@ -19,6 +19,7 @@ Target function:
     Analysis. EvalRunner calls it for each example so the same runner can be
     used with a real Analyst or a fixture replay.
 """
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -175,18 +176,22 @@ class EvalRunner:
                     error=str(exc),
                 )
                 # Record a zero score so the dimension is counted in aggregation.
-                results.append(EvaluationResult(
-                    tenant_id=example.tenant_id,
-                    analysis_id="error",
-                    job_id="error",
-                    dimension_scores=[DimensionScore(
-                        dimension=evaluator.dimension,
-                        score=0.0,
-                        passed=False,
-                        rationale=f"evaluator_error: {exc}",
-                    )],
-                    aggregate_score=0.0,
-                ))
+                results.append(
+                    EvaluationResult(
+                        tenant_id=example.tenant_id,
+                        analysis_id="error",
+                        job_id="error",
+                        dimension_scores=[
+                            DimensionScore(
+                                dimension=evaluator.dimension,
+                                score=0.0,
+                                passed=False,
+                                rationale=f"evaluator_error: {exc}",
+                            )
+                        ],
+                        aggregate_score=0.0,
+                    )
+                )
 
         return results
 
@@ -214,10 +219,10 @@ class EvalRunner:
         violations: list[str] = []
 
         thresholds = {
-            EvalDimension.FAITHFULNESS:      self._settings.thresholds.faithfulness,
+            EvalDimension.FAITHFULNESS: self._settings.thresholds.faithfulness,
             EvalDimension.CITATION_ACCURACY: self._settings.thresholds.citation_accuracy,
-            EvalDimension.RELEVANCE:         self._settings.thresholds.relevance,
-            EvalDimension.COVERAGE:          self._settings.thresholds.coverage,
+            EvalDimension.RELEVANCE: self._settings.thresholds.relevance,
+            EvalDimension.COVERAGE: self._settings.thresholds.coverage,
         }
 
         for dim in EvalDimension:
@@ -227,18 +232,18 @@ class EvalRunner:
             mean_score = sum(scores) / len(scores)
             pass_rate = sum(dim_passed[dim]) / len(dim_passed[dim]) if dim_passed[dim] else 0.0
 
-            summaries.append(DimensionSummary(
-                dimension=dim,
-                mean_score=round(mean_score, 4),
-                pass_rate=round(pass_rate, 4),
-                n_evaluated=len(scores),
-            ))
+            summaries.append(
+                DimensionSummary(
+                    dimension=dim,
+                    mean_score=round(mean_score, 4),
+                    pass_rate=round(pass_rate, 4),
+                    n_evaluated=len(scores),
+                )
+            )
 
             threshold = thresholds.get(dim, 0.0)
             if mean_score < threshold:
-                violations.append(
-                    f"{dim}: mean_score={mean_score:.3f} < threshold={threshold:.3f}"
-                )
+                violations.append(f"{dim}: mean_score={mean_score:.3f} < threshold={threshold:.3f}")
 
         return EvalRunReport(
             suite=suite,

@@ -18,6 +18,7 @@ Middleware ordering in `api/main.py` (outer → inner):
   CorrelationId → AuthMiddleware → RateLimitMiddleware → TenantMiddleware → CORS
 This ensures `request.state.auth_context` is set before rate limiting.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -37,11 +38,16 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_PUBLIC_PATHS = frozenset({
-    "/health/live", "/health/ready",
-    "/docs", "/openapi.json", "/redoc",
-    "/metrics",
-})
+_PUBLIC_PATHS = frozenset(
+    {
+        "/health/live",
+        "/health/ready",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/metrics",
+    }
+)
 
 _KEY_PREFIX = "api:rl"
 

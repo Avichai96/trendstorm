@@ -22,6 +22,7 @@ delivered more than once.
 Run:
     python -m trendstorm.orchestration.workers.production_eval_worker
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -152,8 +153,11 @@ async def run_worker() -> None:
     )
 
     from trendstorm.domain.evaluation.evaluator import Evaluator
+
     embed = build_embedding_provider(settings)
-    evaluators: list[Evaluator] = [CitationLookupEvaluator(embed)]  # CitationLookupEvaluator satisfies Evaluator structurally
+    evaluators: list[Evaluator] = [
+        CitationLookupEvaluator(embed)
+    ]  # CitationLookupEvaluator satisfies Evaluator structurally
 
     # Add LLM panel evaluators when enough providers have keys configured.
     from trendstorm.services.evaluation.evaluators.faithfulness import LLMPanelFaithfulnessEvaluator
@@ -164,12 +168,17 @@ async def run_worker() -> None:
         from typing import cast as _cast
 
         from trendstorm.domain.evaluation.judge import LLMJudge
+
         chat = build_chat_provider(settings)
         # StructuredChatProvider satisfies LLMJudge structurally at runtime
         # (concrete providers implement model_id + judge()); cast for mypy.
         panel = LLMPanel(judges=[_cast(LLMJudge, chat)], settings=settings.eval)
-        evaluators.append(_cast(Evaluator, LLMPanelFaithfulnessEvaluator(panel)))  # satisfies Evaluator structurally
-        evaluators.append(_cast(Evaluator, LLMPanelRelevanceEvaluator(panel)))  # satisfies Evaluator structurally
+        evaluators.append(
+            _cast(Evaluator, LLMPanelFaithfulnessEvaluator(panel))
+        )  # satisfies Evaluator structurally
+        evaluators.append(
+            _cast(Evaluator, LLMPanelRelevanceEvaluator(panel))
+        )  # satisfies Evaluator structurally
         logger.info("production_eval_llm_panel_enabled")
     except Exception as exc:
         logger.warning(

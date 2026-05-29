@@ -10,6 +10,7 @@ Operations:
     - `archive_category`: soft delete.
     - `list_categories`: paginated list.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

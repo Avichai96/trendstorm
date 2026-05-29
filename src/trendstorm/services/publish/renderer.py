@@ -16,6 +16,7 @@ weasyprint notes:
     - weasyprint 63+ requires Pango/HarfBuzz. Added to publisher.Dockerfile.
     - CSS is not required for basic Markdown → PDF; we rely on browser defaults.
 """
+
 from __future__ import annotations
 
 import json
@@ -50,10 +51,12 @@ class RenderEngine:
         Returns a UTF-8 Markdown string.
         """
         template = _load_template()
-        return str(template.render(
-            analysis=analysis,
-            category_name=category_name,
-        ))
+        return str(
+            template.render(
+                analysis=analysis,
+                category_name=category_name,
+            )
+        )
 
     def render_pdf(self, markdown_text: str) -> bytes:
         """Render Markdown → HTML → PDF.

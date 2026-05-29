@@ -1,4 +1,5 @@
 """MongoDB implementation of ReviewRepository."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -31,9 +32,7 @@ class MongoReviewRepository(TenantScopedRepository[ReviewRequest]):
         )
         return self._decode(doc) if doc else None
 
-    async def get_pending_for_job(
-        self, tenant_id: str, job_id: str
-    ) -> ReviewRequest | None:
+    async def get_pending_for_job(self, tenant_id: str, job_id: str) -> ReviewRequest | None:
         doc = await self._find_one(
             self._tenant_query(tenant_id, job_id=job_id, status=ReviewStatus.PENDING),
             what=f"pending ReviewRequest for job {job_id}",
@@ -76,7 +75,7 @@ class MongoReviewRepository(TenantScopedRepository[ReviewRequest]):
             ReviewDecision.REQUEST_REFINEMENT: ReviewStatus.REFINEMENT_REQUESTED,
         }
         new_status = status_map[decision]
-        update: dict = {
+        update: dict[str, object] = {
             "$set": {
                 "status": new_status.value,
                 "reviewer_id": reviewer_id,
@@ -91,9 +90,7 @@ class MongoReviewRepository(TenantScopedRepository[ReviewRequest]):
         )
         return self._decode(doc) if doc else None
 
-    async def mark_timed_out(
-        self, tenant_id: str, review_id: str
-    ) -> ReviewRequest | None:
+    async def mark_timed_out(self, tenant_id: str, review_id: str) -> ReviewRequest | None:
         doc = await self._coll.find_one_and_update(
             self._tenant_query(tenant_id, _id=review_id, status=ReviewStatus.PENDING),
             {

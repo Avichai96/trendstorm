@@ -12,13 +12,18 @@ export const categoryKeys = {
 export const categoriesListOptions = (archived = false, search?: string) =>
   infiniteQueryOptions({
     queryKey: categoryKeys.list(archived, search),
-    queryFn: async ({ pageParam }) =>
-      api.get<Page<Category>>("/v1/categories", {
-        include_archived: archived,
-        search: search || undefined,
-        limit: 25,
-        cursor: pageParam as string | undefined,
-      }),
+    queryFn: async ({ pageParam }) => {
+      const resp = await api.get<{ categories: Category[]; next_cursor: string | null }>(
+        "/v1/categories",
+        {
+          include_archived: archived,
+          search: search || undefined,
+          limit: 25,
+          cursor: pageParam as string | undefined,
+        },
+      );
+      return { items: resp.categories, next_cursor: resp.next_cursor } satisfies Page<Category>;
+    },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.next_cursor ?? undefined,
   });

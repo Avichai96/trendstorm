@@ -1,4 +1,5 @@
 """LLM domain package — Protocols and value objects for LLM providers."""
+
 from __future__ import annotations
 
 from trendstorm.domain.llm.errors import (

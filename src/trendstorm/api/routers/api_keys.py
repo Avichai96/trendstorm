@@ -10,13 +10,18 @@ POST   /v1/api-keys           — create a new key (returns plaintext once)
 GET    /v1/api-keys           — list all keys (active + revoked)
 DELETE /v1/api-keys/{key_id}  — revoke a key immediately
 """
+
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Request, status
-from pydantic import BaseModel, ConfigDict, Field
+from trendstorm_shared import (
+    ApiKeyCreatedResponse,
+    ApiKeyListResponse,
+    ApiKeyResponse,
+    CreateApiKeyRequest,
+)
 
 from trendstorm.api.deps import AuthServiceDep
 from trendstorm.utils.headers_docs import require_tenant
@@ -28,49 +33,8 @@ router = APIRouter(
 )
 
 
-# --- Schemas -----------------------------------------------------------
-
-class CreateApiKeyRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(..., min_length=1, max_length=100)
-
-
-class ApiKeyCreatedResponse(BaseModel):
-    """Returned once on creation — includes the plaintext key."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    name: str
-    key: str                        # plaintext; shown ONCE
-    key_prefix: str                 # for display only
-    tenant_id: str
-    created_at: datetime
-
-
-class ApiKeyResponse(BaseModel):
-    """Standard response — plaintext key never included."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    name: str
-    key_prefix: str
-    tenant_id: str
-    created_at: datetime
-    last_used_at: datetime | None = None
-    revoked_at: datetime | None = None
-    is_active: bool
-
-
-class ApiKeyListResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    keys: list[ApiKeyResponse]
-
-
 # --- Endpoints ---------------------------------------------------------
+
 
 @router.post(
     "",

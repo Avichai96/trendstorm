@@ -8,6 +8,12 @@ resolution-markers = [
     "python_full_version < '3.13'",
 ]
 
+[manifest]
+members = [
+    "trendstorm",
+    "trendstorm-shared",
+]
+
 [[package]]
 name = "aioboto3"
 version = "13.4.0"
@@ -4202,6 +4208,7 @@ dependencies = [
     { name = "redis", extra = ["hiredis"] },
     { name = "sse-starlette" },
     { name = "structlog" },
+    { name = "trendstorm-shared" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -4282,6 +4289,7 @@ requires-dist = [
     { name = "redis", extras = ["hiredis"], specifier = ">=5.2.0,<6.0" },
     { name = "sse-starlette", specifier = ">=2.1.3,<3.0" },
     { name = "structlog", specifier = ">=24.4.0,<25.0" },
+    { name = "trendstorm-shared", editable = "packages/trendstorm-shared" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0,<1.0" },
 ]
 
@@ -4333,6 +4341,17 @@ rag = [
     { name = "rank-bm25", specifier = ">=0.2.2,<1.0" },
     { name = "tiktoken", specifier = ">=0.8.0,<1.0" },
 ]
+
+[[package]]
+name = "trendstorm-shared"
+version = "0.1.0"
+source = { editable = "packages/trendstorm-shared" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2.7" }]
 
 [[package]]
 name = "typer"

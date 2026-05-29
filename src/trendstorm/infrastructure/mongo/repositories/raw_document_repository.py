@@ -1,4 +1,5 @@
 """MongoDB implementation of RawDocumentRepository."""
+
 from __future__ import annotations
 
 from typing import ClassVar
@@ -42,7 +43,7 @@ class MongoRawDocumentRepository(TenantScopedRepository[RawDocument]):
     ) -> list[RawDocument]:
         docs = await self._find_many(
             self._tenant_query(tenant_id, job_id=job_id),
-            sort=[("_id", 1)],   # natural insertion order, ascending
+            sort=[("_id", 1)],  # natural insertion order, ascending
             what="raw documents by job",
         )
         return [self._decode(d) for d in docs]

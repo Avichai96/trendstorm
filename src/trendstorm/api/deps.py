@@ -24,6 +24,7 @@ State storage:
     module-level mutable state, which is hostile to testing and confusing
     in worker processes that don't have a FastAPI app.
 """
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -44,6 +45,7 @@ from trendstorm.shared.config import Settings, get_settings
 # Configuration provider
 # ---------------------------------------------------------------------------
 
+
 def get_app_settings() -> Settings:
     """Provide the cached app Settings."""
     return get_settings()
@@ -55,6 +57,7 @@ SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 # ---------------------------------------------------------------------------
 # Infrastructure client providers
 # ---------------------------------------------------------------------------
+
 
 def get_mongo(request: Request) -> MongoClient:
     """Provide the Mongo client from app.state.
@@ -88,6 +91,7 @@ def get_kafka_producer(request: Request) -> KafkaProducerClient:
 # ---------------------------------------------------------------------------
 # Convenient type aliases for router signatures
 # ---------------------------------------------------------------------------
+
 
 def get_blob(request: Request) -> MinioClient:
     """Provide the MinIO/blob client from app.state."""

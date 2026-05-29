@@ -1,4 +1,5 @@
 """Jobs resource — create and monitor trend analysis jobs."""
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

@@ -470,8 +470,9 @@ class TestReviewTimeoutSweeper:
         assert call_args.kwargs.get("key") == review.job_id.encode()
 
     @pytest.mark.asyncio
-    async def test_sweep_skips_concurrently_resolved(self) -> None:
-        """mark_timed_out returns None → another worker already resolved; skip."""
+    async def test_sweep_publishes_before_mark_timed_out(self) -> None:
+        """B2 fix: Kafka publish happens FIRST; mark_timed_out returns None (concurrent
+        resolve) but the event was already published — the orchestrator deduplicates."""
         from trendstorm.orchestration.workers.review_timeout_worker import ReviewTimeoutSweeper
 
         review = self._make_expired_review()
@@ -490,7 +491,10 @@ class TestReviewTimeoutSweeper:
         with patch("trendstorm.orchestration.workers.review_timeout_worker.METRICS"):
             await sweeper._sweep_once()
 
-        producer.producer.send_and_wait.assert_not_awaited()
+        # Kafka IS called even when mark_timed_out returns None — publish-first design.
+        producer.producer.send_and_wait.assert_awaited_once()
+        # mark_timed_out is still called after the Kafka publish.
+        review_repo.mark_timed_out.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_sweep_no_expired_is_noop(self) -> None:
@@ -511,7 +515,12 @@ class TestReviewTimeoutSweeper:
 
     @pytest.mark.asyncio
     async def test_sweep_continues_on_single_review_error(self) -> None:
-        """Error expiring one review must not abort the rest of the batch."""
+        """Error expiring one review must not abort the rest of the batch.
+
+        B2 design: Kafka is published first. When mark_timed_out fails for r1,
+        the event was already published (safe — orchestrator is idempotent).
+        r2 still gets fully processed.
+        """
         from trendstorm.orchestration.workers.review_timeout_worker import ReviewTimeoutSweeper
 
         r1 = self._make_expired_review()
@@ -529,8 +538,9 @@ class TestReviewTimeoutSweeper:
             mock_metrics.review_timeout_total = MagicMock()
             await sweeper._sweep_once()
 
-        # r2 should still have been processed
-        assert producer.producer.send_and_wait.await_count == 1
+        # Both reviews get a Kafka publish (publish-first design).
+        # r1's mark_timed_out fails but Kafka already fired; r2 succeeds fully.
+        assert producer.producer.send_and_wait.await_count == 2
 
     @pytest.mark.asyncio
     async def test_stop_event_terminates_loop(self) -> None:

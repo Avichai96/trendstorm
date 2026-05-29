@@ -6,6 +6,7 @@ as typed return types; the server can import them for schema validation in tests
 All timestamps are datetime objects (UTC-aware). The server serialises them as
 ISO-8601 strings; Pydantic parses them back automatically.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -14,6 +15,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from trendstorm_shared.types import (
+    FlaggingReason,
     JobStatus,
     ReviewDecision,
     ReviewStatus,
@@ -29,6 +31,7 @@ class _Base(BaseModel):
 # ---------------------------------------------------------------------------
 # Categories
 # ---------------------------------------------------------------------------
+
 
 class CategoryResponse(_Base):
     id: str
@@ -65,6 +68,7 @@ class UpdateCategoryRequest(BaseModel):
 # Sources
 # ---------------------------------------------------------------------------
 
+
 class SourceResponse(_Base):
     id: str
     category_id: str
@@ -94,6 +98,7 @@ class RegisterSourceRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Jobs
 # ---------------------------------------------------------------------------
+
 
 class JobMetricsResponse(_Base):
     documents_ingested: int = 0
@@ -145,6 +150,7 @@ class CreateJobRequest(BaseModel):
 # Reviews (HITL)
 # ---------------------------------------------------------------------------
 
+
 class ReviewResponse(_Base):
     id: str
     job_id: str
@@ -157,6 +163,11 @@ class ReviewResponse(_Base):
     resolved_at: datetime | None = None
     timeout_at: datetime
     sla_seconds: int
+    # Fields added in Phase 15.6 — populated by review_gate_node
+    validator_score: float | None = None
+    refinement_loops_used: int = 0
+    cost_usd_so_far_cents: int = 0
+    flagging_reason: FlaggingReason | None = None
 
 
 class ResolveReviewRequest(BaseModel):
@@ -174,6 +185,7 @@ class ResolveReviewRequest(BaseModel):
 # Quota / usage
 # ---------------------------------------------------------------------------
 
+
 class QuotaResponse(_Base):
     allowed: bool
     monthly_spend_usd: float
@@ -186,6 +198,7 @@ class QuotaResponse(_Base):
 # ---------------------------------------------------------------------------
 # API keys
 # ---------------------------------------------------------------------------
+
 
 class ApiKeyCreatedResponse(_Base):
     id: str
@@ -218,8 +231,83 @@ class CreateApiKeyRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Memories (Phase 15.5+)
+# ---------------------------------------------------------------------------
+
+
+class CreateMemoryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(min_length=1, max_length=4000)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    tags: list[str] = Field(default_factory=list)
+    curated_by: str = Field(min_length=1, max_length=256)
+
+
+class MemoryResponse(_Base):
+    id: str
+    tenant_id: str
+    category_id: str
+    kind: str
+    source: str
+    content: str
+    confidence: float
+    is_active: bool
+    tags: list[str]
+    superseded_by: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class MemoryListResponse(_Base):
+    items: list[MemoryResponse]
+    total: int
+
+
+# ---------------------------------------------------------------------------
+# Analyses (Phase 15.6 — exposed via GET /v1/jobs/{id}/analysis)
+# ---------------------------------------------------------------------------
+
+
+class AnalysisResponse(_Base):
+    id: str
+    job_id: str
+    summary: str
+    validator_score: float
+    validator_passed: bool
+    refinement_loops: int = 0
+    created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Audit log (Phase 15.6 — exposed via GET /v1/audit)
+# ---------------------------------------------------------------------------
+
+
+class AuditLogEntryResponse(_Base):
+    id: str
+    tenant_id: str
+    event_type: str
+    actor: str
+    resource_type: str
+    resource_id: str
+    action: str
+    outcome: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    trace_id: str | None = None
+    correlation_id: str | None = None
+
+
+class AuditLogListResponse(_Base):
+    items: list[AuditLogEntryResponse]
+    next_cursor: str | None = None
+
+
+# ---------------------------------------------------------------------------
 # Streaming events
 # ---------------------------------------------------------------------------
+
 
 class StreamEvent(_Base):
     event_id: str

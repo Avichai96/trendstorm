@@ -1,4 +1,5 @@
 """Quota resource — per-tenant spend and job quota status."""
+
 from __future__ import annotations
 
 from trendstorm_shared.models import QuotaResponse

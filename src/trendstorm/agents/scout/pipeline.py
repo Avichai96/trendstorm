@@ -20,6 +20,7 @@ Usage (from the Scout Kafka worker):
         concurrency=settings.ingest.concurrency_per_job,
     )
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -64,18 +65,20 @@ tracer = trace.get_tracer(__name__)
 # Internal task type — one entry per URL in the work queue
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True, slots=True)
 class _FetchTask:
     url: str
     source_id: str
     category_id: str
-    source_type: str            # SourceType.value
+    source_type: str  # SourceType.value
     update_source_status: bool  # False for sitemap-discovered sub-URLs
 
 
 # ---------------------------------------------------------------------------
 # Public result types
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class SourceOutcome:
@@ -110,6 +113,7 @@ class IngestionResult:
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
+
 
 async def ingest_sources(
     *,
@@ -199,6 +203,7 @@ async def ingest_sources(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class _PipelineContext:
     """Bundle of shared clients passed to every task processor."""
@@ -237,24 +242,38 @@ async def _process_task_inner(
             task.url, source_id=task.source_id, tenant_id=ctx.tenant_id
         )
     except FetchError as exc:
-        await _update_status(ctx.source_repo, ctx.tenant_id, task.source_id,
-                              status=exc.code, error=exc.message,
-                              update=task.update_source_status)
+        await _update_status(
+            ctx.source_repo,
+            ctx.tenant_id,
+            task.source_id,
+            status=exc.code,
+            error=exc.message,
+            update=task.update_source_status,
+        )
         return SourceOutcome(
-            source_id=task.source_id, status="failed",
-            error_code=exc.code, error_message=exc.message,
+            source_id=task.source_id,
+            status="failed",
+            error_code=exc.code,
+            error_message=exc.message,
         ), []
 
     # 2. Parse ----------------------------------------------------------------
     try:
         parse_result = route(fetch_result)
     except ParseError as exc:
-        await _update_status(ctx.source_repo, ctx.tenant_id, task.source_id,
-                              status=exc.code, error=exc.message,
-                              update=task.update_source_status)
+        await _update_status(
+            ctx.source_repo,
+            ctx.tenant_id,
+            task.source_id,
+            status=exc.code,
+            error=exc.message,
+            update=task.update_source_status,
+        )
         return SourceOutcome(
-            source_id=task.source_id, status="failed",
-            error_code=exc.code, error_message=exc.message,
+            source_id=task.source_id,
+            status="failed",
+            error_code=exc.code,
+            error_message=exc.message,
         ), []
 
     # 3. Sitemap expansion — queue discovered URLs, no document stored here --
@@ -269,8 +288,13 @@ async def _process_task_inner(
             )
             for url in parse_result.discovered_urls
         ]
-        await _update_status(ctx.source_repo, ctx.tenant_id, task.source_id,
-                              status="ok", update=task.update_source_status)
+        await _update_status(
+            ctx.source_repo,
+            ctx.tenant_id,
+            task.source_id,
+            status="ok",
+            update=task.update_source_status,
+        )
         logger.info("sitemap_expanded", source_id=task.source_id, count=len(extra))
         return SourceOutcome(source_id=task.source_id, status="created"), extra
 
@@ -278,10 +302,16 @@ async def _process_task_inner(
     c_hash = content_hash(parse_result.text)
     existing = await ctx.raw_doc_repo.find_by_content_hash(ctx.tenant_id, c_hash)
     if existing:
-        doc_ref = _make_ref(existing.id, task.source_id, c_hash,
-                            existing.blob_uri_raw, existing.char_count)
-        await _update_status(ctx.source_repo, ctx.tenant_id, task.source_id,
-                              status="ok", update=task.update_source_status)
+        doc_ref = _make_ref(
+            existing.id, task.source_id, c_hash, existing.blob_uri_raw, existing.char_count
+        )
+        await _update_status(
+            ctx.source_repo,
+            ctx.tenant_id,
+            task.source_id,
+            status="ok",
+            update=task.update_source_status,
+        )
         logger.debug("dedup_hit", source_id=task.source_id, doc_id=existing.id)
         return SourceOutcome(
             source_id=task.source_id, status="deduplicated", document_ref=doc_ref
@@ -303,12 +333,19 @@ async def _process_task_inner(
             content_type="text/plain; charset=utf-8",
         )
     except BlobError as exc:
-        await _update_status(ctx.source_repo, ctx.tenant_id, task.source_id,
-                              status=exc.code, error=exc.message,
-                              update=task.update_source_status)
+        await _update_status(
+            ctx.source_repo,
+            ctx.tenant_id,
+            task.source_id,
+            status=exc.code,
+            error=exc.message,
+            update=task.update_source_status,
+        )
         return SourceOutcome(
-            source_id=task.source_id, status="failed",
-            error_code=exc.code, error_message=exc.message,
+            source_id=task.source_id,
+            status="failed",
+            error_code=exc.code,
+            error_message=exc.message,
         ), []
 
     # 6. Write RawDocument to Mongo -------------------------------------------
@@ -335,20 +372,29 @@ async def _process_task_inner(
         # Race: another worker inserted the same content_hash between our dedup
         # check and our insert. Treat as a dedup — the doc already exists.
         logger.debug("dedup_race", source_id=task.source_id, hash=c_hash[:12])
-        await _update_status(ctx.source_repo, ctx.tenant_id, task.source_id,
-                              status="ok", update=task.update_source_status)
+        await _update_status(
+            ctx.source_repo,
+            ctx.tenant_id,
+            task.source_id,
+            status="ok",
+            update=task.update_source_status,
+        )
         return SourceOutcome(source_id=task.source_id, status="deduplicated"), []
 
     # 7. Update source fetch status -------------------------------------------
-    await _update_status(ctx.source_repo, ctx.tenant_id, task.source_id,
-                         status="ok", update=task.update_source_status)
+    await _update_status(
+        ctx.source_repo,
+        ctx.tenant_id,
+        task.source_id,
+        status="ok",
+        update=task.update_source_status,
+    )
 
     doc_ref = _make_ref(doc_id, task.source_id, c_hash, uri_raw, raw_doc.char_count)
-    logger.info("document_created", source_id=task.source_id, doc_id=doc_id,
-                char_count=raw_doc.char_count)
-    return SourceOutcome(
-        source_id=task.source_id, status="created", document_ref=doc_ref
-    ), []
+    logger.info(
+        "document_created", source_id=task.source_id, doc_id=doc_id, char_count=raw_doc.char_count
+    )
+    return SourceOutcome(source_id=task.source_id, status="created", document_ref=doc_ref), []
 
 
 def _make_ref(
@@ -359,6 +405,7 @@ def _make_ref(
     char_count: int,
 ) -> DocumentRef:
     from trendstorm.agents.state import DocumentRef  # avoid circular at module load
+
     return DocumentRef(
         id=doc_id,
         source_id=source_id,
@@ -382,7 +429,8 @@ async def _update_status(
         return
     try:
         await repo.update_fetch_status(
-            tenant_id, source_id,
+            tenant_id,
+            source_id,
             status=status,
             error=error,
             fetched_at=now_utc(),

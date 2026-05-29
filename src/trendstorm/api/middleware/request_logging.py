@@ -12,6 +12,7 @@ Convention:
     - Log at INFO for 2xx/3xx, WARNING for 4xx, ERROR for 5xx.
     - Log unhandled exceptions before they propagate to the exception handler.
 """
+
 from __future__ import annotations
 
 import time

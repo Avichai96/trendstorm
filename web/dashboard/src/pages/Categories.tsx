@@ -76,7 +76,7 @@ export default function Categories() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <div className="flex flex-wrap gap-1">
-                      {cat.keywords.slice(0, 4).map((kw) => (
+                      {cat.keywords.slice(0, 4).map((kw: string) => (
                         <Badge key={kw} variant="secondary" className="text-xs">
                           {kw}
                         </Badge>

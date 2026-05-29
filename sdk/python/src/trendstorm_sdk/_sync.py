@@ -13,20 +13,14 @@ overhead from loop creation and teardown.
 Stream events are NOT available on the sync client because generators over
 async iterators cannot be trivially bridged. Use the async client for SSE.
 """
+
 from __future__ import annotations
 
 import asyncio
-from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Generator
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ._client import TrendStormClient
-    from .resources.api_keys import ApiKeysResource as AsyncApiKeysResource
-    from .resources.categories import CategoriesResource as AsyncCategoriesResource
-    from .resources.jobs import JobsResource as AsyncJobsResource
-    from .resources.quota import QuotaResource as AsyncQuotaResource
-    from .resources.reviews import ReviewsResource as AsyncReviewsResource
-    from .resources.sources import SourcesResource as AsyncSourcesResource
+    pass
 
 
 def _run(coro: Any) -> Any:
@@ -42,8 +36,10 @@ class _SyncResource:
     def __getattr__(self, name: str) -> Any:
         attr = getattr(self._async, name)
         if asyncio.iscoroutinefunction(attr):
+
             def _sync_wrapper(*args: Any, **kwargs: Any) -> Any:
                 return _run(attr(*args, **kwargs))
+
             _sync_wrapper.__name__ = name
             return _sync_wrapper
         return attr
@@ -66,6 +62,7 @@ class SyncTrendStormClient:
 
     def __init__(self, **kwargs: Any) -> None:
         from ._client import TrendStormClient
+
         self._async_client = TrendStormClient(**kwargs)
         self._entered = False
 

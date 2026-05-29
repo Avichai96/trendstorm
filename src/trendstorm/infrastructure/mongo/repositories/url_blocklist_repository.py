@@ -1,4 +1,5 @@
 """MongoDB implementation of UrlBlocklistRepository."""
+
 from __future__ import annotations
 
 from typing import ClassVar
@@ -29,9 +30,7 @@ class MongoUrlBlocklistRepository(TenantScopedRepository[UrlBlocklistEntry]):
 
     async def delete(self, tenant_id: str, entry_id: str) -> bool:
         try:
-            result = await self._coll.delete_one(
-                self._tenant_query(tenant_id, _id=entry_id)
-            )
+            result = await self._coll.delete_one(self._tenant_query(tenant_id, _id=entry_id))
             return result.deleted_count > 0
         except Exception:
             return False

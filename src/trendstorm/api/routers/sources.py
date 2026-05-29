@@ -1,11 +1,11 @@
 """Sources router."""
+
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query, Request, status
-from pydantic import BaseModel, ConfigDict, Field
+from trendstorm_shared import RegisterSourceRequest, SourceListResponse, SourceResponse
 
 from trendstorm.api.deps import MongoDep
 from trendstorm.domain.sources.models import Source
@@ -15,41 +15,14 @@ from trendstorm.infrastructure.mongo.repositories import (
 )
 from trendstorm.services.source_service import SourceService
 from trendstorm.shared.ids import is_valid_id
-from trendstorm.shared.types import SourceType
+from trendstorm.shared.types import SourceType as DomainSourceType
+from trendstorm.utils.headers_docs import require_tenant
 
-router = APIRouter(prefix="/v1/sources", tags=["sources"])
-
-
-# --- Schemas -----------------------------------------------------------
-
-class RegisterSourceRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    category_id: str = Field(..., min_length=26, max_length=26)
-    url: str = Field(..., min_length=4, max_length=4096)
-    label: str | None = Field(default=None, max_length=200)
-    type: SourceType = SourceType.HTTP
-
-
-class SourceResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    category_id: str
-    url: str
-    label: str | None
-    type: SourceType
-    enabled: bool
-    last_fetch_at: datetime | None
-    last_fetch_status: str | None
-    last_fetch_error: str | None
-    created_at: datetime
-
-
-class SourceListResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    sources: list[SourceResponse]
+router = APIRouter(
+    prefix="/v1/sources",
+    tags=["sources"],
+    dependencies=[Depends(require_tenant)],
+)
 
 
 def _to_response(s: Source) -> SourceResponse:
@@ -69,6 +42,7 @@ def _to_response(s: Source) -> SourceResponse:
 
 # --- DI ----------------------------------------------------------------
 
+
 def get_source_service(mongo: MongoDep) -> SourceService:
     return SourceService(
         sources=MongoSourceRepository(mongo),
@@ -80,6 +54,7 @@ SourceServiceDep = Annotated[SourceService, Depends(get_source_service)]
 
 
 # --- Endpoints ---------------------------------------------------------
+
 
 @router.post(
     "",
@@ -96,7 +71,7 @@ async def register_source(
         category_id=body.category_id,
         url=body.url,
         label=body.label,
-        source_type=body.type,
+        source_type=DomainSourceType(body.type.value),
     )
     return _to_response(source)
 
@@ -112,6 +87,7 @@ async def get_source(
 ) -> SourceResponse:
     if not is_valid_id(source_id):
         from trendstorm.shared.errors import NotFoundError
+
         raise NotFoundError(f"Source {source_id} not found")
     source = await service.get_source(
         tenant_id=request.state.tenant_id,

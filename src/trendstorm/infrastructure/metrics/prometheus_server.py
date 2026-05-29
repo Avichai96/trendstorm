@@ -23,6 +23,7 @@ Usage (in a worker's run_worker()):
 The server exposes ALL metrics registered via prometheus_client's default
 registry (or the registry passed to the constructor).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -47,6 +48,7 @@ class _SilentHandler(WSGIRequestHandler):
 
 def _metrics_app(registry: CollectorRegistry) -> Any:
     """WSGI app that serves Prometheus metrics."""
+
     def app(environ: Any, start_response: Any) -> list[bytes]:
         if environ.get("PATH_INFO") == "/metrics":
             output = generate_latest(registry)
@@ -58,6 +60,7 @@ def _metrics_app(registry: CollectorRegistry) -> Any:
             headers = [("Content-Type", "text/plain")]
         start_response(status, headers)
         return [output]
+
     return app
 
 

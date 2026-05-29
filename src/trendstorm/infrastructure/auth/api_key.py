@@ -15,6 +15,7 @@ portion for display (safe to expose — 8 chars of a 32-char secret is ~24%).
 All functions here are pure (no I/O), fully testable, importable without any
 infra clients.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -24,8 +25,8 @@ from typing import Literal
 KeyEnv = Literal["live", "test"]
 
 _PREFIX = "ts"
-_RANDOM_LENGTH = 32     # url-safe chars; ~192 bits of entropy
-_DISPLAY_LENGTH = 8     # chars of random portion shown in the UI (safe)
+_RANDOM_LENGTH = 32  # url-safe chars; ~192 bits of entropy
+_DISPLAY_LENGTH = 8  # chars of random portion shown in the UI (safe)
 
 
 def generate_api_key(env: KeyEnv = "live") -> str:

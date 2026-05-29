@@ -10,7 +10,7 @@ export const quotaKeys = {
 export const quotaCurrentMonthOptions = () =>
   queryOptions({
     queryKey: quotaKeys.currentMonth(),
-    queryFn: () => api.get<QuotaUsage>("/v1/billing/quota"),
+    queryFn: () => api.get<QuotaUsage>("/v1/quota"),
     refetchInterval: 60_000,
     staleTime: 30_000,
   });

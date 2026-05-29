@@ -7,6 +7,7 @@ Keeping path construction in one place means parsers, workers, and the API
 all produce identical URIs — there is no ambiguity about trailing slashes,
 encoding, or separator characters.
 """
+
 from __future__ import annotations
 
 
@@ -37,7 +38,7 @@ def parse_s3_uri(uri: str) -> tuple[str, str]:
     """
     if not uri.startswith("s3://"):
         raise ValueError(f"Not an S3 URI: {uri!r}")
-    rest = uri[len("s3://"):]
+    rest = uri[len("s3://") :]
     bucket, _, key = rest.partition("/")
     if not bucket:
         raise ValueError(f"S3 URI has no bucket: {uri!r}")

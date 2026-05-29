@@ -8,6 +8,7 @@ This endpoint is excluded from:
     - Tenant middleware (no X-Tenant-ID required; Prometheus scraper doesn't send it)
     - Correlation ID middleware (adds irrelevant overhead)
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter
@@ -21,7 +22,7 @@ router = APIRouter(tags=["observability"])
     "/metrics",
     summary="Prometheus metrics",
     response_class=Response,
-    include_in_schema=False,   # hide from Swagger — this is for Prometheus only
+    include_in_schema=False,  # hide from Swagger — this is for Prometheus only
 )
 async def metrics() -> Response:
     """Expose all registered Prometheus metrics in text exposition format.

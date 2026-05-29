@@ -33,6 +33,7 @@ Resume semantics:
     For downstream workers (scout, knowledge, etc.) we DO use idempotency
     because they don't have a checkpointer of their own.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -62,6 +63,7 @@ from trendstorm.agents.state import (
     PublishingState,
     SourceRef,
 )
+from trendstorm.domain.streaming.events import StreamEvent, StreamEventType
 from trendstorm.infrastructure.kafka.consumer import BaseConsumer
 from trendstorm.infrastructure.kafka.producer import KafkaProducerClient
 from trendstorm.infrastructure.mongo.client import MongoClient
@@ -83,7 +85,6 @@ from trendstorm.orchestration.events import (
     ReviewResolvedEvent,
 )
 from trendstorm.orchestration.topics import ConsumerGroup, Topic
-from trendstorm.domain.streaming.events import StreamEvent, StreamEventType
 from trendstorm.services.streaming.emit import emit_stream_event
 from trendstorm.shared.config import AnalysisSettings, KafkaSettings, get_settings
 from trendstorm.shared.errors import NotFoundError
@@ -190,9 +191,7 @@ class OrchestratorWorker(BaseConsumer):
                 event_type=getattr(event, "event_type", "unknown"),
             )
 
-    def _record_handle_metrics(
-        self, event: EventEnvelope, status: str, elapsed: float
-    ) -> None:
+    def _record_handle_metrics(self, event: EventEnvelope, status: str, elapsed: float) -> None:
         METRICS.orchestrator_events.labels(
             tenant_id=event.tenant_id,
             event_type=getattr(event, "event_type", "unknown"),
@@ -211,10 +210,7 @@ class OrchestratorWorker(BaseConsumer):
         state = JobState.initial(
             tenant_id=event.tenant_id,
             category_id=event.category_id,
-            sources=[
-                SourceRef(id=sid, type="http", label=sid)
-                for sid in event.source_ids
-            ],
+            sources=[SourceRef(id=sid, type="http", label=sid) for sid in event.source_ids],
             correlation_id=event.correlation_id,
         )
         state = state.model_copy(update={"job_id": event.job_id})
@@ -244,7 +240,9 @@ class OrchestratorWorker(BaseConsumer):
         except Exception:
             logger.exception("graph_start_failed", job_id=event.job_id)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, JobStatus.FAILED,
+                event.tenant_id,
+                event.job_id,
+                JobStatus.FAILED,
                 failure_code="graph_error",
                 failure_message="Graph failed on startup",
             )
@@ -253,8 +251,11 @@ class OrchestratorWorker(BaseConsumer):
         if final_state:
             new_status = _STAGE_TO_STATUS.get(final_state.stage, JobStatus.FAILED)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, new_status,
-                failure_code=None, failure_message=None,
+                event.tenant_id,
+                event.job_id,
+                new_status,
+                failure_code=None,
+                failure_message=None,
             )
             logger.info(
                 "graph_paused_awaiting_scout",
@@ -325,7 +326,9 @@ class OrchestratorWorker(BaseConsumer):
         except Exception:
             logger.exception("graph_resume_failed", job_id=event.job_id)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, JobStatus.FAILED,
+                event.tenant_id,
+                event.job_id,
+                JobStatus.FAILED,
                 failure_code="graph_resume_error",
                 failure_message="Graph resume failed after ingest",
             )
@@ -334,10 +337,13 @@ class OrchestratorWorker(BaseConsumer):
         if final_state:
             new_status = _STAGE_TO_STATUS.get(final_state.stage, JobStatus.FAILED)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, new_status,
+                event.tenant_id,
+                event.job_id,
+                new_status,
                 failure_code=None if new_status != JobStatus.FAILED else "graph_failed",
                 failure_message=(
-                    None if new_status != JobStatus.FAILED
+                    None
+                    if new_status != JobStatus.FAILED
                     else f"Graph terminated at stage {final_state.stage.value}"
                 ),
             )
@@ -346,7 +352,6 @@ class OrchestratorWorker(BaseConsumer):
                 job_id=event.job_id,
                 stage=final_state.stage.value,
             )
-
 
     async def _handle_knowledge_completed(self, event: KnowledgeCompletedEvent) -> None:
         """Resume the graph after the knowledge worker finishes chunking+embedding."""
@@ -401,7 +406,9 @@ class OrchestratorWorker(BaseConsumer):
         except Exception:
             logger.exception("graph_resume_failed_after_knowledge", job_id=event.job_id)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, JobStatus.FAILED,
+                event.tenant_id,
+                event.job_id,
+                JobStatus.FAILED,
                 failure_code="graph_resume_error",
                 failure_message="Graph resume failed after knowledge embedding",
             )
@@ -410,10 +417,13 @@ class OrchestratorWorker(BaseConsumer):
         if final_state:
             new_status = _STAGE_TO_STATUS.get(final_state.stage, JobStatus.FAILED)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, new_status,
+                event.tenant_id,
+                event.job_id,
+                new_status,
                 failure_code=None if new_status != JobStatus.FAILED else "graph_failed",
                 failure_message=(
-                    None if new_status != JobStatus.FAILED
+                    None
+                    if new_status != JobStatus.FAILED
                     else f"Graph terminated at stage {final_state.stage.value}"
                 ),
             )
@@ -458,7 +468,9 @@ class OrchestratorWorker(BaseConsumer):
                 error_message=event.error_message,
             )
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, JobStatus.FAILED,
+                event.tenant_id,
+                event.job_id,
+                JobStatus.FAILED,
                 failure_code=event.error_code or "analyst_failed",
                 failure_message=event.error_message or "Analyst reported failure",
             )
@@ -572,7 +584,9 @@ class OrchestratorWorker(BaseConsumer):
                 job_id=event.job_id,
             )
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, JobStatus.FAILED,
+                event.tenant_id,
+                event.job_id,
+                JobStatus.FAILED,
                 failure_code="graph_resume_error",
                 failure_message="Graph resume failed after analysis completed",
             )
@@ -581,10 +595,13 @@ class OrchestratorWorker(BaseConsumer):
         if final_state:
             new_status = _STAGE_TO_STATUS.get(final_state.stage, JobStatus.FAILED)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, new_status,
+                event.tenant_id,
+                event.job_id,
+                new_status,
                 failure_code=None if new_status != JobStatus.FAILED else "graph_failed",
                 failure_message=(
-                    None if new_status != JobStatus.FAILED
+                    None
+                    if new_status != JobStatus.FAILED
                     else f"Graph terminated at stage {final_state.stage.value}"
                 ),
             )
@@ -637,8 +654,9 @@ class OrchestratorWorker(BaseConsumer):
         try:
             decision = ReviewDecision(event.decision)
         except ValueError:
-            logger.error("review_resolved.unknown_decision",
-                         job_id=event.job_id, decision=event.decision)
+            logger.error(
+                "review_resolved.unknown_decision", job_id=event.job_id, decision=event.decision
+            )
             return
 
         # Mark review resolved in Mongo.
@@ -652,7 +670,9 @@ class OrchestratorWorker(BaseConsumer):
 
         if decision == ReviewDecision.REJECT:
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, JobStatus.REJECTED,
+                event.tenant_id,
+                event.job_id,
+                JobStatus.REJECTED,
                 failure_code="review_rejected",
                 failure_message=event.comment or "Analysis rejected by reviewer.",
             )
@@ -666,8 +686,12 @@ class OrchestratorWorker(BaseConsumer):
                 producer=self._producer,
                 correlation_id=current.observability.correlation_id,
             )
-            logger.info("review_resolved.rejected", job_id=event.job_id,
-                        review_id=event.review_id, resolved_by=event.resolved_by)
+            logger.info(
+                "review_resolved.rejected",
+                job_id=event.job_id,
+                review_id=event.review_id,
+                resolved_by=event.resolved_by,
+            )
             return
 
         if decision == ReviewDecision.APPROVE:
@@ -688,8 +712,12 @@ class OrchestratorWorker(BaseConsumer):
                 correlation_id=current.observability.correlation_id,
             )
             await self._resume_to_publish_after_review(event, config)
-            logger.info("review_resolved.approved", job_id=event.job_id,
-                        review_id=event.review_id, resolved_by=event.resolved_by)
+            logger.info(
+                "review_resolved.approved",
+                job_id=event.job_id,
+                review_id=event.review_id,
+                resolved_by=event.resolved_by,
+            )
             return
 
         # decision == ReviewDecision.REQUEST_REFINEMENT
@@ -716,11 +744,18 @@ class OrchestratorWorker(BaseConsumer):
             refinement_notes=refinement_notes,
         )
         await self._jobs.update_status(
-            event.tenant_id, event.job_id, JobStatus.ANALYZING,
-            failure_code=None, failure_message=None,
+            event.tenant_id,
+            event.job_id,
+            JobStatus.ANALYZING,
+            failure_code=None,
+            failure_message=None,
         )
-        logger.info("review_resolved.refinement_requested", job_id=event.job_id,
-                    review_id=event.review_id, new_loop=new_loop)
+        logger.info(
+            "review_resolved.refinement_requested",
+            job_id=event.job_id,
+            review_id=event.review_id,
+            new_loop=new_loop,
+        )
 
     async def _publish_refinement_request_from_review(
         self,
@@ -763,7 +798,9 @@ class OrchestratorWorker(BaseConsumer):
         final_state: JobState | None = None
         try:
             async for step in self._graph.astream(
-                None, config=pub_config, interrupt_after=[NODE_PUBLISH],
+                None,
+                config=pub_config,
+                interrupt_after=[NODE_PUBLISH],
             ):
                 for node_name, _update in step.items():
                     if node_name == "__interrupt__":
@@ -775,7 +812,9 @@ class OrchestratorWorker(BaseConsumer):
         except Exception:
             logger.exception("graph_resume_failed_after_review_approval", job_id=event.job_id)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, JobStatus.FAILED,
+                event.tenant_id,
+                event.job_id,
+                JobStatus.FAILED,
                 failure_code="graph_resume_error",
                 failure_message="Graph resume failed after review approval",
             )
@@ -784,8 +823,11 @@ class OrchestratorWorker(BaseConsumer):
         if final_state:
             new_status = _STAGE_TO_STATUS.get(final_state.stage, JobStatus.FAILED)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, new_status,
-                failure_code=None, failure_message=None,
+                event.tenant_id,
+                event.job_id,
+                new_status,
+                failure_code=None,
+                failure_message=None,
             )
 
     async def _handle_publish_completed(self, event: PublishCompletedEvent) -> None:
@@ -819,7 +861,9 @@ class OrchestratorWorker(BaseConsumer):
                 error_message=event.error_message,
             )
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, JobStatus.FAILED,
+                event.tenant_id,
+                event.job_id,
+                JobStatus.FAILED,
                 failure_code=event.error_code or "publisher_failed",
                 failure_message=event.error_message or "Publisher reported failure",
             )
@@ -827,9 +871,10 @@ class OrchestratorWorker(BaseConsumer):
 
         # Inject the report IDs as PublishingState; advance to MEMORY_CONSOLIDATION.
         report_uri = (
-            f"s3://trendstorm-reports/{event.job_id}"
-            f"/{event.markdown_report_id}/report.md"
-        ) if event.markdown_report_id else ""
+            (f"s3://trendstorm-reports/{event.job_id}/{event.markdown_report_id}/report.md")
+            if event.markdown_report_id
+            else ""
+        )
 
         await self._graph.aupdate_state(
             config,
@@ -863,7 +908,9 @@ class OrchestratorWorker(BaseConsumer):
         except Exception:
             logger.exception("graph_resume_failed_after_publish", job_id=event.job_id)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, JobStatus.FAILED,
+                event.tenant_id,
+                event.job_id,
+                JobStatus.FAILED,
                 failure_code="graph_resume_error",
                 failure_message="Graph resume failed after publish completed",
             )
@@ -922,7 +969,9 @@ class OrchestratorWorker(BaseConsumer):
         except Exception:
             logger.exception("graph_resume_failed_after_memory", job_id=event.job_id)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, JobStatus.FAILED,
+                event.tenant_id,
+                event.job_id,
+                JobStatus.FAILED,
                 failure_code="graph_resume_error_memory",
                 failure_message="Graph resume failed after memory consolidation",
             )
@@ -931,10 +980,13 @@ class OrchestratorWorker(BaseConsumer):
         if final_state:
             new_status = _STAGE_TO_STATUS.get(final_state.stage, JobStatus.COMPLETED)
             await self._jobs.update_status(
-                event.tenant_id, event.job_id, new_status,
+                event.tenant_id,
+                event.job_id,
+                new_status,
                 failure_code=None if new_status != JobStatus.FAILED else "graph_failed",
                 failure_message=(
-                    None if new_status != JobStatus.FAILED
+                    None
+                    if new_status != JobStatus.FAILED
                     else f"Graph terminated at stage {final_state.stage.value}"
                 ),
             )
@@ -952,6 +1004,7 @@ class OrchestratorWorker(BaseConsumer):
 # Process entrypoint
 # ===========================================================================
 
+
 async def run_worker() -> None:
     """Start the orchestrator worker process, blocking until shutdown."""
     settings = get_settings()
@@ -966,6 +1019,7 @@ async def run_worker() -> None:
 
     job_repo = MongoJobRepository(mongo)
     analysis_repo = MongoAnalysisRepository(mongo)
+    review_repo = MongoReviewRepository(mongo)
     idem = IdempotencyRepository(mongo)
 
     checkpointer = MongoCheckpointer(settings.mongo)
@@ -978,6 +1032,7 @@ async def run_worker() -> None:
         graph=graph,
         job_repo=job_repo,
         analysis_repo=analysis_repo,
+        review_repo=review_repo,
         idempotency=idem,
         producer=producer,
         analysis_settings=settings.analysis,

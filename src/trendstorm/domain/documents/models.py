@@ -32,6 +32,7 @@ What we DO store:
     - `fetch_metadata`: HTTP status, redirect chain, content-type — for
       debugging "why is this source failing?"
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -49,7 +50,7 @@ class FetchMetadata(BaseModel):
     http_status: int | None = None
     content_type: str | None = None
     bytes_fetched: int = 0
-    final_url: str | None = None    # after redirects
+    final_url: str | None = None  # after redirects
     fetch_duration_ms: int | None = None
 
 
@@ -61,7 +62,7 @@ class RawDocument(BaseModel):
     id: str = Field(default_factory=new_id)
     tenant_id: str
     job_id: str
-    category_id: str           # denormalized for "find all docs in this category" queries
+    category_id: str  # denormalized for "find all docs in this category" queries
     source_id: str
 
     # The original URL (after canonicalization) we fetched.
@@ -77,7 +78,7 @@ class RawDocument(BaseModel):
     # Where the bytes live. MinIO URI of the form
     # "s3://trendstorm-raw/{tenant}/{job_id}/{doc_id}/raw.html"
     blob_uri_raw: str | None = None
-    blob_uri_text: str | None = None    # parsed-text artifact
+    blob_uri_text: str | None = None  # parsed-text artifact
 
     # Detected language (langdetect or similar). Optional — not all pages have one.
     language: str | None = None

@@ -18,6 +18,7 @@ When to add a manual span?
     - You want to attach attributes that downstream debugging will need
       (e.g. token counts, retrieval scores).
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -61,20 +62,20 @@ def configure_tracing(service_name: str | None = None) -> None:
     # Resource attributes are attached to every span emitted by this process.
     # service.name is the most important one — it's how Jaeger/Tempo groups
     # spans into services.
-    resource = Resource.create({
-        ResourceAttributes.SERVICE_NAME: service_name or settings.otel.service_name,
-        ResourceAttributes.SERVICE_VERSION: settings.otel.service_version,
-        ResourceAttributes.DEPLOYMENT_ENVIRONMENT: settings.app.env.value,
-    })
+    resource = Resource.create(
+        {
+            ResourceAttributes.SERVICE_NAME: service_name or settings.otel.service_name,
+            ResourceAttributes.SERVICE_VERSION: settings.otel.service_version,
+            ResourceAttributes.DEPLOYMENT_ENVIRONMENT: settings.app.env.value,
+        }
+    )
 
     # Sampler: ParentBased + TraceIdRatio is the standard recipe.
     #   - If the incoming request has trace context, respect its sampling decision.
     #   - Otherwise, sample new traces at the configured ratio.
     # This ensures a trace is either fully sampled or fully dropped — never
     # half-sampled, which would be useless for debugging.
-    sampler = ParentBased(
-        root=TraceIdRatioBased(settings.otel.traces_sampler_arg)
-    )
+    sampler = ParentBased(root=TraceIdRatioBased(settings.otel.traces_sampler_arg))
 
     provider = TracerProvider(resource=resource, sampler=sampler)
 

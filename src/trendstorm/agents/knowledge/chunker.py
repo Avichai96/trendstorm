@@ -24,6 +24,7 @@ Window sizing note:
     full concatenated window text — these can differ slightly because tiktoken
     tokenises across sentence boundaries differently than within them.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -37,7 +38,7 @@ class RawChunk:
 
     text: str
     token_count: int
-    position: int            # 0-indexed global position (parents + children interleaved)
+    position: int  # 0-indexed global position (parents + children interleaved)
     parent_index: int | None  # None = this IS a parent; int = index of parent in the list
     char_start: int
     char_end: int
@@ -55,7 +56,7 @@ class RawChunk:
 @dataclass(frozen=True)
 class _Sentence:
     text: str
-    token_count: int   # per-sentence count (used for windowing decisions)
+    token_count: int  # per-sentence count (used for windowing decisions)
     char_start: int
     char_end: int
 
@@ -64,7 +65,7 @@ class _Sentence:
 class _Window:
     sentences: tuple[_Sentence, ...]
     text: str
-    token_count: int   # count on full window text (accurate)
+    token_count: int  # count on full window text (accurate)
     char_start: int
     char_end: int
 

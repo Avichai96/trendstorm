@@ -14,6 +14,7 @@ Global entries (tenant_id=None) are seeded from ops/security/global-blocklist.tx
 and loaded as an in-memory frozenset at module load. They are NOT stored in
 MongoDB — the file is the authoritative source.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -34,9 +35,9 @@ class UrlBlocklistEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     id: str = Field(default_factory=new_id)
-    tenant_id: str                                           # scope to this tenant
-    pattern: str                                             # the matching value
+    tenant_id: str  # scope to this tenant
+    pattern: str  # the matching value
     pattern_type: Literal["domain", "suffix", "prefix", "cidr"] = "domain"
-    reason: str = ""                                         # human note
-    added_by: str = "system"                                 # actor
+    reason: str = ""  # human note
+    added_by: str = "system"  # actor
     created_at: datetime = Field(default_factory=_utc_now)

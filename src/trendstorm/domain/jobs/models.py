@@ -12,6 +12,7 @@ This is INTENTIONALLY separate from JobState (the LangGraph runtime state):
     - The two can evolve at different paces; the Job model is part of the
       public contract, while JobState is a private implementation detail.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -30,7 +31,7 @@ class JobMetrics(BaseModel):
     chunks_retrieved: int = 0
     llm_input_tokens: int = 0
     llm_output_tokens: int = 0
-    duration_seconds: float | None = None       # set when terminal
+    duration_seconds: float | None = None  # set when terminal
 
 
 class Job(BaseModel):

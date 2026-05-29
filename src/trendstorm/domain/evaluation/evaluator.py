@@ -6,6 +6,7 @@ and runs them against each GoldenExample (or production Analysis).
 Protocol is @runtime_checkable so callers can verify implementations at
 startup without a full type-checker run.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol, runtime_checkable

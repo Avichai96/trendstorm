@@ -41,6 +41,7 @@ Usage:
     from trendstorm.shared.metrics.registry import METRICS
     METRICS.api_request_duration.labels(tenant_id=tid, operation="create_job", status="success").observe(elapsed)
 """
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -52,17 +53,19 @@ from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram
 # Forbidden label guard
 # ---------------------------------------------------------------------------
 
-_FORBIDDEN_LABELS: Final[frozenset[str]] = frozenset({
-    "job_id",
-    "document_id",
-    "chunk_id",
-    "correlation_id",
-    "source_id",
-    "analysis_id",
-    "report_id",
-    "user_id",
-    "request_id",
-})
+_FORBIDDEN_LABELS: Final[frozenset[str]] = frozenset(
+    {
+        "job_id",
+        "document_id",
+        "chunk_id",
+        "correlation_id",
+        "source_id",
+        "analysis_id",
+        "report_id",
+        "user_id",
+        "request_id",
+    }
+)
 
 
 def _check_labels(metric_name: str, labels: tuple[str, ...]) -> None:
@@ -78,6 +81,7 @@ def _check_labels(metric_name: str, labels: tuple[str, ...]) -> None:
 # ---------------------------------------------------------------------------
 # Allowed label value enums
 # ---------------------------------------------------------------------------
+
 
 class StatusLabel(StrEnum):
     SUCCESS = "success"
@@ -113,6 +117,7 @@ class ContentTypeLabel(StrEnum):
 
 class MemoryKindLabel(StrEnum):
     """Memory kind label values — bounded by enum for cardinality safety."""
+
     SEMANTIC = "semantic"
     EPISODIC = "episodic"
 
@@ -124,25 +129,26 @@ class SecurityBlockReason(StrEnum):
     Keeping these as a StrEnum gives IDE completion and prevents typos at
     call sites. New rejection classes MUST be added here first.
     """
+
     # SSRF — IPv4
-    SSRF_PRIVATE_IP = "ssrf_private_ip"         # RFC 1918 + CG-NAT
-    SSRF_LOOPBACK = "ssrf_loopback"             # 127.0.0.0/8
-    SSRF_LINK_LOCAL = "ssrf_link_local"         # 169.254.0.0/16 (AWS IMDS)
-    SSRF_IPV4_MAPPED = "ssrf_ipv4_mapped"       # ::ffff:0:0/96
+    SSRF_PRIVATE_IP = "ssrf_private_ip"  # RFC 1918 + CG-NAT
+    SSRF_LOOPBACK = "ssrf_loopback"  # 127.0.0.0/8
+    SSRF_LINK_LOCAL = "ssrf_link_local"  # 169.254.0.0/16 (AWS IMDS)
+    SSRF_IPV4_MAPPED = "ssrf_ipv4_mapped"  # ::ffff:0:0/96
     # SSRF — IPv6
-    SSRF_IPV6_LOOPBACK = "ssrf_ipv6_loopback"   # ::1
-    SSRF_IPV6_ULA = "ssrf_ipv6_ula"             # fc00::/7
+    SSRF_IPV6_LOOPBACK = "ssrf_ipv6_loopback"  # ::1
+    SSRF_IPV6_ULA = "ssrf_ipv6_ula"  # fc00::/7
     SSRF_IPV6_LINK_LOCAL = "ssrf_ipv6_link_local"  # fe80::/10
     # SSRF — other
     SSRF_INTERNAL_HOSTNAME = "ssrf_internal_hostname"  # .internal / .local etc.
-    SSRF_SCHEME_DOWNGRADE = "ssrf_scheme_downgrade"    # https -> http redirect
+    SSRF_SCHEME_DOWNGRADE = "ssrf_scheme_downgrade"  # https -> http redirect
     SSRF_SCHEME_NOT_ALLOWED = "ssrf_scheme_not_allowed"  # file://, ftp:// etc.
-    SSRF_MAX_REDIRECTS = "ssrf_max_redirects"   # exceeded hop limit
-    SSRF_DNS_FAILURE = "ssrf_dns_failure"       # hostname did not resolve
-    SSRF_NO_HOSTNAME = "ssrf_no_hostname"       # URL has no hostname
+    SSRF_MAX_REDIRECTS = "ssrf_max_redirects"  # exceeded hop limit
+    SSRF_DNS_FAILURE = "ssrf_dns_failure"  # hostname did not resolve
+    SSRF_NO_HOSTNAME = "ssrf_no_hostname"  # URL has no hostname
     # Blocklists
-    SSRF_BLOCKLIST_GLOBAL = "ssrf_blocklist_global"    # global ops/security file
-    SSRF_BLOCKLIST_TENANT = "ssrf_blocklist_tenant"    # per-tenant Mongo entry
+    SSRF_BLOCKLIST_GLOBAL = "ssrf_blocklist_global"  # global ops/security file
+    SSRF_BLOCKLIST_TENANT = "ssrf_blocklist_tenant"  # per-tenant Mongo entry
     # PII
     PII_SSN = "pii_ssn"
     PII_CC = "pii_cc"
@@ -168,6 +174,7 @@ _SLOW_BUCKETS = (5.0, 10.0, 30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1800.0)
 # ---------------------------------------------------------------------------
 # Registry factory
 # ---------------------------------------------------------------------------
+
 
 class _TrendStormMetrics:
     """Singleton container for all declared metrics.
@@ -455,7 +462,9 @@ class _TrendStormMetrics:
         # ------------------------------------------------------------------ #
         # LLM call metrics (all providers)
         # ------------------------------------------------------------------ #
-        _check_labels("llm_call_duration_seconds", ("tenant_id", "provider", "model_id", "operation"))
+        _check_labels(
+            "llm_call_duration_seconds", ("tenant_id", "provider", "model_id", "operation")
+        )
         self.llm_call_duration = (
             Histogram(
                 "trendstorm_llm_call_duration_seconds",
@@ -473,7 +482,9 @@ class _TrendStormMetrics:
             )
         )
 
-        _check_labels("llm_calls_total", ("tenant_id", "provider", "model_id", "operation", "status"))
+        _check_labels(
+            "llm_calls_total", ("tenant_id", "provider", "model_id", "operation", "status")
+        )
         self.llm_calls = (
             Counter(
                 "trendstorm_llm_calls_total",
@@ -926,6 +937,7 @@ def record_security_block(
         reason: A SecurityBlockReason value (or SSRFBlockedError.reason).
         tenant_id: The tenant scope — hashed before use as a label.
         metrics: Override for tests; defaults to the module-level METRICS singleton.
+
     """
     m = metrics if metrics is not None else METRICS
     try:

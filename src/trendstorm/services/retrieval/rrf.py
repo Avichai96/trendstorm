@@ -20,6 +20,7 @@ Why RRF and not score normalisation + weighted sum?
 
 Implementation is a pure function: no I/O, no state.
 """
+
 from __future__ import annotations
 
 

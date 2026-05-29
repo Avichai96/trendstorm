@@ -18,6 +18,7 @@ Why not int IDs?
     - Privacy: int IDs leak business volume (`/jobs/12345` tells competitors
       we have at least 12k jobs).
 """
+
 from __future__ import annotations
 
 from ulid import ULID

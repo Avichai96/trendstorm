@@ -3,6 +3,7 @@
 These must match the server's `shared/types/__init__.py` and domain enums exactly.
 When the server adds a new status, add it here too before or alongside the deploy.
 """
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -60,6 +61,13 @@ class ReviewDecision(StrEnum):
     APPROVE = "approve"
     REJECT = "reject"
     REQUEST_REFINEMENT = "request_refinement"
+
+
+class FlaggingReason(StrEnum):
+    ALWAYS_MODE = "always_mode"
+    LOW_VALIDATOR_SCORE = "low_validator_score"
+    REFINEMENT_BUDGET_EXHAUSTED = "refinement_budget_exhausted"
+    COST_THRESHOLD_EXCEEDED = "cost_threshold_exceeded"
 
 
 class StreamEventType(StrEnum):

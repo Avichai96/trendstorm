@@ -1,4 +1,5 @@
 """MongoDB implementation of ReportRepository."""
+
 from __future__ import annotations
 
 from typing import ClassVar

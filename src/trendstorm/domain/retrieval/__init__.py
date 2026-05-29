@@ -15,6 +15,7 @@ Models:
     RetrievalRequest  — query + filter parameters
     RetrievedChunk    — one retrieval result with text, parent text, provenance
 """
+
 from trendstorm.domain.retrieval.models import RetrievalRequest, RetrievedChunk
 from trendstorm.domain.retrieval.protocols import (
     BM25Retriever,

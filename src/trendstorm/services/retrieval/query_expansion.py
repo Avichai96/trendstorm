@@ -16,6 +16,7 @@ Design:
     - If the LLM is unavailable, the fallback is [original_query] — retrieval
       proceeds with one query instead of N. This is a warning, not an error.
 """
+
 from __future__ import annotations
 
 import importlib.resources
@@ -125,7 +126,7 @@ class QueryExpander:
         # Always include at least the original — ensures recall is never worse
         # than single-query retrieval.
         if query not in sub_queries:
-            sub_queries = [query, *sub_queries[:count - 1]]
+            sub_queries = [query, *sub_queries[: count - 1]]
 
         logger.debug(
             "query_expansion_done",

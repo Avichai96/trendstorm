@@ -5,6 +5,7 @@ handles boilerplate removal (nav, ads, footers) well. The BS4 fallback fires
 when trafilatura returns None, which typically means JS-heavy SPAs, login
 walls, or error pages where there is no extractable main content block.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

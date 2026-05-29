@@ -14,6 +14,7 @@ Usage (via registry, Step 8):
     provider = GeminiEmbeddingProvider(api_key=...)
     provider = with_retry(provider, max_attempts=3, base_delay=1.0, max_delay=60.0)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,7 +42,7 @@ def _backoff_delay(
 ) -> float:
     """Full-jitter exponential delay: uniform(0, min(max_delay, base * 2**attempt))."""
     fn = _random_fn if _random_fn is not None else random.uniform
-    cap = min(max_delay, base * (2 ** attempt))
+    cap = min(max_delay, base * (2**attempt))
     return fn(0.0, cap)
 
 

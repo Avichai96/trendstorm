@@ -15,6 +15,7 @@ The relay does NOT have a DLQ. If an entry can't be published after many
 retries, it sits in the outbox until an operator investigates. Data is not
 silently discarded.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -33,9 +34,9 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 tracer = trace.get_tracer(__name__)
 
-_DEFAULT_POLL_INTERVAL = 0.5   # seconds
+_DEFAULT_POLL_INTERVAL = 0.5  # seconds
 _DEFAULT_BATCH_SIZE = 100
-_MAX_RETRY_LOG_THRESHOLD = 5   # log a warning when entry exceeds this
+_MAX_RETRY_LOG_THRESHOLD = 5  # log a warning when entry exceeds this
 
 
 class OutboxRelay:

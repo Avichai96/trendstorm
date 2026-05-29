@@ -12,6 +12,7 @@ The hot query is the partial-index scan on `published_at=None` ordered by
 `created_at` — it touches only unpublished entries, which is tiny on a
 healthy system.
 """
+
 from __future__ import annotations
 
 from typing import ClassVar

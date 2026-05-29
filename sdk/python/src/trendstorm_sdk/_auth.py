@@ -6,6 +6,7 @@ Supported:
 
 The auth object is injected into each HTTP request by ``TrendStormClient._request``.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +15,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import httpx
+    pass
 
 
 class _Auth(ABC):

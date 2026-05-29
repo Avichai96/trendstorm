@@ -5,6 +5,7 @@ function dispatches by content_type. For generic XML (application/xml,
 text/xml), it peeks at the root element tag to decide between sitemap and
 RSS before falling back to the HTML extractor.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -38,6 +39,7 @@ class ParseResult:
 # ---------------------------------------------------------------------------
 # Content-type → parser dispatch table
 # ---------------------------------------------------------------------------
+
 
 def route(result: FetchResult) -> ParseResult:
     """Dispatch a FetchResult to the correct parser by content-type."""

@@ -20,6 +20,7 @@ Lifecycle:
 
 Dependency group: llm (cohere>=5.13.0 is already present).
 """
+
 from __future__ import annotations
 
 import contextlib

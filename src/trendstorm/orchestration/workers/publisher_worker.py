@@ -24,6 +24,7 @@ Retry topology:
 Run:
     python -m trendstorm.orchestration.workers.publisher_worker
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -229,9 +230,7 @@ class PublisherWorker(BaseConsumer):
     # Retry routing
     # ------------------------------------------------------------------ #
 
-    async def _handle_failure(
-        self, event: EventEnvelope, error: TrendStormError
-    ) -> None:
+    async def _handle_failure(self, event: EventEnvelope, error: TrendStormError) -> None:
         if not isinstance(event, PublishPendingEvent):
             await super()._handle_failure(event, error)
             return
@@ -240,9 +239,7 @@ class PublisherWorker(BaseConsumer):
         retry_index = attempt - 1
         if retry_index < len(_RETRY_TOPICS):
             retry_topic = _RETRY_TOPICS[retry_index]
-            retry_event = event.model_copy(
-                update={"attempt": attempt + 1, "event_id": new_id()}
-            )
+            retry_event = event.model_copy(update={"attempt": attempt + 1, "event_id": new_id()})
             try:
                 await self._producer.producer.send_and_wait(
                     retry_topic.value,
@@ -276,6 +273,7 @@ class PublisherWorker(BaseConsumer):
 # ===========================================================================
 # Process entry point
 # ===========================================================================
+
 
 async def run_worker() -> None:
     """Start the publisher worker process, blocking until shutdown signal."""

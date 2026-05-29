@@ -10,6 +10,7 @@ Why single call?
     while the overall analysis is not, or vice versa. The judges are given the
     summary and category brief and asked to assess overall alignment.
 """
+
 from __future__ import annotations
 
 import importlib.resources

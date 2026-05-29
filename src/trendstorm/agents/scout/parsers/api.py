@@ -4,6 +4,7 @@ Stores the pretty-printed JSON as text. Source-specific field mappings
 (extracting "title", "body", etc. from a known API schema) belong in a
 separate layer; this parser is intentionally generic.
 """
+
 from __future__ import annotations
 
 import json

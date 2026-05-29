@@ -13,6 +13,7 @@ Design:
   alert (ops/runbooks/cost-overrun.md). We accept this trade-off to avoid
   a distributed lock on job creation.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -61,6 +62,7 @@ class QuotaService:
 
             # Parallel reads from the ledger.
             import asyncio
+
             spend_micro, job_count = await asyncio.gather(
                 self._ledger.monthly_spend_usd_micro(tenant_id, year, month),
                 self._ledger.jobs_this_month(tenant_id, year, month),
@@ -82,10 +84,7 @@ class QuotaService:
                     limit_usd_micro=quotas.monthly_spend_usd_micro,
                 )
             elif not jobs_allowed:
-                reason = (
-                    f"Monthly job limit reached "
-                    f"({job_count} of {quotas.max_jobs_per_month})."
-                )
+                reason = f"Monthly job limit reached ({job_count} of {quotas.max_jobs_per_month})."
                 logger.warning(
                     "quota.jobs_exceeded",
                     tenant_id=tenant_id,

@@ -22,6 +22,7 @@ Design notes:
     - source_url is left None; the Analyst enriches it from the Source collection
       when building Citation objects.
 """
+
 from __future__ import annotations
 
 from opentelemetry import trace
@@ -117,10 +118,10 @@ class MongoBM25Retriever:
                     chunk_id=str(doc["_id"]),
                     score=float(doc.get("score", 0.0)),
                     text=doc["text"],
-                    parent_text=None,           # filled by HybridRetriever
+                    parent_text=None,  # filled by HybridRetriever
                     document_id=doc["document_id"],
                     source_id=doc["source_id"],
-                    source_url=None,            # filled by Analyst
+                    source_url=None,  # filled by Analyst
                 )
             )
 

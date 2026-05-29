@@ -12,6 +12,7 @@ Why keep this at all?
 
   This file will be removed in Phase 13 once AUTH_MODE=header is retired.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -30,11 +31,16 @@ if TYPE_CHECKING:
 
 TENANT_HEADER = "x-tenant-id"
 
-_PUBLIC_PATHS = frozenset({
-    "/health/live", "/health/ready",
-    "/docs", "/openapi.json", "/redoc",
-    "/metrics",
-})
+_PUBLIC_PATHS = frozenset(
+    {
+        "/health/live",
+        "/health/ready",
+        "/docs",
+        "/openapi.json",
+        "/redoc",
+        "/metrics",
+    }
+)
 
 
 class TenantMiddleware(BaseHTTPMiddleware):

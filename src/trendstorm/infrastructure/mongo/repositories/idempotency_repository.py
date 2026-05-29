@@ -23,6 +23,7 @@ Race condition handling:
     gets `DuplicateKeyError` -> returns False -> skips. This is the
     "compare-and-swap" pattern, atomic and scale-safe.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

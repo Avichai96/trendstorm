@@ -16,6 +16,7 @@ Parent text:
     the LLM. parent_text is None when the retrieved chunk IS a parent (no further
     expansion needed) or when parent lookup failed (treated as best-effort).
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field

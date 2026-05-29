@@ -35,6 +35,7 @@ Schema versioning:
     worker. Without this field, schema evolution is impossible without
     nuking checkpoints.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -48,12 +49,13 @@ from trendstorm.shared.ids import new_id
 # Reference types — small, IDs only. Bulk data lives elsewhere.
 # ---------------------------------------------------------------------------
 
+
 class SourceRef(BaseModel):
     """Reference to a registered Source (user-defined URL/API/feed)."""
 
     id: str
-    type: str       # SourceType value
-    label: str      # human-readable for logs/UI
+    type: str  # SourceType value
+    label: str  # human-readable for logs/UI
 
 
 class DocumentRef(BaseModel):
@@ -62,7 +64,7 @@ class DocumentRef(BaseModel):
     id: str
     source_id: str
     content_hash: str
-    blob_uri: str | None = None     # MinIO URI for raw bytes
+    blob_uri: str | None = None  # MinIO URI for raw bytes
     char_count: int = 0
 
 
@@ -87,6 +89,7 @@ class StageError(BaseModel):
 # ---------------------------------------------------------------------------
 # Per-stage state sub-models. Each stage owns its own slice.
 # ---------------------------------------------------------------------------
+
 
 class IngestionState(BaseModel):
     """Outputs of the ingestion stage."""
@@ -113,7 +116,7 @@ class RetrievalState(BaseModel):
 class AnalysisState(BaseModel):
     """Outputs of the analysis stage."""
 
-    insights_doc_id: str | None = None      # ref into `analyses` collection
+    insights_doc_id: str | None = None  # ref into `analyses` collection
     validation_score: float = 0.0
     validation_passed: bool = False
 
@@ -121,7 +124,7 @@ class AnalysisState(BaseModel):
 class PublishingState(BaseModel):
     """Outputs of the publishing stage."""
 
-    report_doc_id: str | None = None        # ref into `reports` collection
+    report_doc_id: str | None = None  # ref into `reports` collection
     report_blob_uri: str | None = None
 
 
@@ -132,7 +135,7 @@ class MemoryConsolidationState(BaseModel):
     memory per job, N semantic memories from the LLM extraction pass.
     """
 
-    episodic_memory_id: str | None = None       # ULID of the episodic Memory doc
+    episodic_memory_id: str | None = None  # ULID of the episodic Memory doc
     semantic_memory_ids: list[str] = Field(default_factory=list)  # ULIDs of semantic docs
 
 
@@ -140,7 +143,7 @@ class ObservabilityContext(BaseModel):
     """Carried with state so resumed workflows continue the same trace."""
 
     correlation_id: str
-    trace_id: str | None = None      # OTel hex trace_id; None until first span
+    trace_id: str | None = None  # OTel hex trace_id; None until first span
     parent_span_id: str | None = None
 
 
@@ -158,7 +161,7 @@ DEFAULT_RETRY_BUDGETS: dict[Stage, int] = {
     Stage.RETRIEVING: 3,
     Stage.ANALYZING: 2,
     Stage.PUBLISHING: 3,
-    Stage.MEMORY_CONSOLIDATION: 2,   # Phase 15.5: memory write is best-effort
+    Stage.MEMORY_CONSOLIDATION: 2,  # Phase 15.5: memory write is best-effort
 }
 
 # Max self-correction loops (RETRIEVING <-> ANALYZING). Without a cap, a
@@ -169,6 +172,7 @@ MAX_REFINEMENT_LOOPS: int = 2
 # ---------------------------------------------------------------------------
 # Root state model
 # ---------------------------------------------------------------------------
+
 
 class JobState(BaseModel):
     """The complete state passed between LangGraph nodes.
@@ -185,7 +189,7 @@ class JobState(BaseModel):
     )
 
     # --- Schema versioning ----------------------------------------------
-    schema_version: int = 3   # bumped for Phase 15.5: MemoryConsolidationState added
+    schema_version: int = 3  # bumped for Phase 15.5: MemoryConsolidationState added
 
     # --- Identity --------------------------------------------------------
     job_id: str
@@ -196,9 +200,7 @@ class JobState(BaseModel):
     stage: Stage = Stage.PENDING
     # Counters per stage. Used for retry budgets AND idempotency keys.
     attempts: dict[Stage, int] = Field(default_factory=dict)
-    retry_budgets: dict[Stage, int] = Field(
-        default_factory=lambda: dict(DEFAULT_RETRY_BUDGETS)
-    )
+    retry_budgets: dict[Stage, int] = Field(default_factory=lambda: dict(DEFAULT_RETRY_BUDGETS))
     refinement_loops: int = 0
 
     # --- Sources to process ---------------------------------------------

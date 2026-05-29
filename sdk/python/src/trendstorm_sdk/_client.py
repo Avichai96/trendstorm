@@ -13,6 +13,7 @@ Environment variables:
     TRENDSTORM_BASE_URL   — used when ``base_url`` argument is omitted.
     TRENDSTORM_OAUTH_TOKEN — used when ``oauth_token`` argument is omitted.
 """
+
 from __future__ import annotations
 
 import os
@@ -86,7 +87,9 @@ class TrendStormClient:
                 "Pass api_key= or set the TRENDSTORM_API_KEY environment variable."
             )
 
-        self._base_url = (base_url or os.environ.get("TRENDSTORM_BASE_URL") or _DEFAULT_BASE_URL).rstrip("/")
+        self._base_url = (
+            base_url or os.environ.get("TRENDSTORM_BASE_URL") or _DEFAULT_BASE_URL
+        ).rstrip("/")
         self._timeout = timeout
         self._max_retries = max_retries
         self._http: httpx.AsyncClient | None = None

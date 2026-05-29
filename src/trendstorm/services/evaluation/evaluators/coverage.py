@@ -18,6 +18,7 @@ Requires a GoldenExample with expected_analysis. If example is None or has no
 expected_analysis, raises ValueError — callers must skip this evaluator on
 production samples.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -100,7 +101,7 @@ class GoldenCoverageEvaluator:
             total_required = sum(1 for ei in expected.insights if ei.required)
             total_all = len(expected.insights)
 
-            for (expected_insight, expected_vec) in zip(
+            for expected_insight, expected_vec in zip(
                 expected.insights, expected_vecs, strict=False
             ):
                 best_sim = 0.0

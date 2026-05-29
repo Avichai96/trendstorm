@@ -11,8 +11,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from trendstorm.domain.llm.models import EmbeddingBatchResult
 from trendstorm.domain.memories.models import Memory, MemoryKind, MemorySource
 from trendstorm.services.memory.retrieval import MemoryRetriever, RetrievedMemory
+
+
+def _batch(vectors: list[list[float]]) -> EmbeddingBatchResult:
+    """Wrap raw vectors in the domain result type for mock return values."""
+    return EmbeddingBatchResult(vectors=vectors, model_id="test.model", input_tokens=0)
 
 
 def _now() -> datetime:
@@ -65,7 +71,7 @@ class TestSupersedeLowSimilarityNoSupersede:
         mock_chat = MagicMock()
         mock_embed = MagicMock()
         mock_embed.model_id = "text-embedding-004"
-        mock_embed.embed_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+        mock_embed.embed_batch = AsyncMock(return_value=_batch([[0.1, 0.2, 0.3]]))
 
         mock_repo = MagicMock()
         mock_repo.supersede = AsyncMock()
@@ -105,7 +111,7 @@ class TestSupersedHighSimilarityDoesSuperside:
         mock_chat = MagicMock()
         mock_embed = MagicMock()
         mock_embed.model_id = "text-embedding-004"
-        mock_embed.embed_batch = AsyncMock(return_value=[[0.1, 0.2, 0.3]])
+        mock_embed.embed_batch = AsyncMock(return_value=_batch([[0.1, 0.2, 0.3]]))
 
         mock_repo = MagicMock()
         mock_repo.supersede = AsyncMock()
@@ -141,7 +147,7 @@ class TestSupersedHighSimilarityDoesSuperside:
         mock_chat = MagicMock()
         mock_embed = MagicMock()
         mock_embed.model_id = "text-embedding-004"
-        mock_embed.embed_batch = AsyncMock(return_value=[[0.1, 0.2]])
+        mock_embed.embed_batch = AsyncMock(return_value=_batch([[0.1, 0.2]]))
 
         mock_repo = MagicMock()
         mock_repo.supersede = AsyncMock()
@@ -176,7 +182,7 @@ class TestSupersedHighSimilarityDoesSuperside:
         mock_chat = MagicMock()
         mock_embed = MagicMock()
         mock_embed.model_id = "text-embedding-004"
-        mock_embed.embed_batch = AsyncMock(return_value=[[0.1]])
+        mock_embed.embed_batch = AsyncMock(return_value=_batch([[0.1]]))
 
         mock_repo = MagicMock()
         mock_repo.supersede = AsyncMock()
@@ -210,7 +216,7 @@ class TestMemoryRetriever:
         mem = _memory()
         mock_embed = MagicMock()
         mock_embed.model_id = "text-embedding-004"
-        mock_embed.embed_batch = AsyncMock(return_value=[[0.5, 0.6]])
+        mock_embed.embed_batch = AsyncMock(return_value=_batch([[0.5, 0.6]]))
 
         mock_store = MagicMock()
         mock_store.query_memories = AsyncMock(
@@ -242,7 +248,7 @@ class TestMemoryRetriever:
         mem = _memory(is_active=False)
         mock_embed = MagicMock()
         mock_embed.model_id = "text-embedding-004"
-        mock_embed.embed_batch = AsyncMock(return_value=[[0.5]])
+        mock_embed.embed_batch = AsyncMock(return_value=_batch([[0.5]]))
 
         mock_store = MagicMock()
         mock_store.query_memories = AsyncMock(
@@ -266,7 +272,7 @@ class TestMemoryRetriever:
     async def test_skips_missing_mongo_docs(self) -> None:
         mock_embed = MagicMock()
         mock_embed.model_id = "text-embedding-004"
-        mock_embed.embed_batch = AsyncMock(return_value=[[0.5]])
+        mock_embed.embed_batch = AsyncMock(return_value=_batch([[0.5]]))
 
         mock_store = MagicMock()
         mock_store.query_memories = AsyncMock(
@@ -292,7 +298,7 @@ class TestMemoryRetriever:
         mem_a = _memory(tenant_id="tenant-a", memory_id="mem-a")
         mock_embed = MagicMock()
         mock_embed.model_id = "text-embedding-004"
-        mock_embed.embed_batch = AsyncMock(return_value=[[0.5]])
+        mock_embed.embed_batch = AsyncMock(return_value=_batch([[0.5]]))
 
         mock_store = MagicMock()
         # Chroma returns only tenant-a's memory (filter is applied inside query_memories)

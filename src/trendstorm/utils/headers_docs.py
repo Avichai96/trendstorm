@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, Callable
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends, Header, HTTPException, Request
 
@@ -12,7 +12,7 @@ async def require_tenant(x_tenant_id: Annotated[str, Header(alias="x-tenant-id")
     return x_tenant_id
 
 
-def require_role(role: str) -> Callable[..., None]:
+def require_role(role: str) -> Any:
     """FastAPI dependency that enforces a specific role on the request principal.
 
     Works for both API key auth (roles from ApiKey.roles) and JWT auth (roles
@@ -22,6 +22,7 @@ def require_role(role: str) -> Callable[..., None]:
     Usage:
         @router.get("/...", dependencies=[require_role("reviewer")])
     """
+
     def _check(request: Request) -> None:
         ctx = getattr(request.state, "auth_context", None)
         if ctx is None or role not in ctx.roles:

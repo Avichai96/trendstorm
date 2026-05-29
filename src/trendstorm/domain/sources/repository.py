@@ -1,4 +1,5 @@
 """SourceRepository protocol."""
+
 from __future__ import annotations
 
 from typing import Protocol
@@ -45,7 +46,7 @@ class SourceRepository(Protocol):
         *,
         status: str,
         error: str | None = None,
-        fetched_at: object,    # datetime; typed loosely to avoid circular import
+        fetched_at: object,  # datetime; typed loosely to avoid circular import
     ) -> None:
         """Record the most recent fetch outcome. Called by Scout."""
         ...

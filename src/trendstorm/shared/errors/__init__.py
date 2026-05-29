@@ -33,6 +33,7 @@ Each error carries:
     - `code`: machine-readable identifier (snake_case) — stable contract
     - `context`: structured data for logs/clients
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -95,6 +96,7 @@ class BusinessRuleError(TrendStormError):
 
 
 # --- External service errors -------------------------------------------------
+
 
 class ExternalServiceError(TrendStormError):
     default_code = "external_service_error"
@@ -184,7 +186,7 @@ class SSRFBlockedError(FetchError):
         *,
         reason: str,
         url: str,
-        context: dict | None = None,
+        context: dict[str, object] | None = None,
     ) -> None:
         super().__init__(
             message or self.default_message,

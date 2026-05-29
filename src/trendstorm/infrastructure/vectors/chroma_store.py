@@ -12,6 +12,7 @@ Distance → score conversion (cosine space):
     VectorHit.score ∈ [0, 1] where 1 = identical, 0 = opposite.
     Formula: score = max(0, min(1, 1 - distance / 2)).
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

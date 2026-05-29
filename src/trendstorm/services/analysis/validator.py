@@ -21,6 +21,7 @@ Tool name:
     and pinned by the prompt smoke tests. Do not rename without updating the
     prompt and tests.
 """
+
 from __future__ import annotations
 
 import importlib.resources
@@ -118,9 +119,7 @@ class AnalysisValidator:
     ) -> None:
         self._chat = chat_provider
         self._settings = settings
-        self._prompt: str = (
-            _prompt_text if _prompt_text is not None else _load_validator_prompt()
-        )
+        self._prompt: str = _prompt_text if _prompt_text is not None else _load_validator_prompt()
 
     async def validate(
         self,

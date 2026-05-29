@@ -14,6 +14,7 @@ Outcome values (machine-readable for dashboards):
     "allowed"    — action passed all checks (security-positive audit)
     "detected"   — anomaly detected but not blocked (warning-level)
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -40,12 +41,12 @@ class AuditLogEntry(BaseModel):
 
     id: str = Field(default_factory=new_id)
     tenant_id: str
-    event_type: str        # e.g. "ssrf_blocked", "pii_detected", "url_blocked"
-    actor: str             # "system" | "api_key:<id>" | "user:<id>"
-    resource_type: str     # "source" | "chunk" | "job" | "url"
-    resource_id: str       # ULID of the resource being acted on (or the URL)
-    action: str            # e.g. "validate_url", "redact_pii", "check_blocklist"
-    outcome: str           # "blocked" | "redacted" | "allowed" | "detected"
+    event_type: str  # e.g. "ssrf_blocked", "pii_detected", "url_blocked"
+    actor: str  # "system" | "api_key:<id>" | "user:<id>"
+    resource_type: str  # "source" | "chunk" | "job" | "url"
+    resource_id: str  # ULID of the resource being acted on (or the URL)
+    action: str  # e.g. "validate_url", "redact_pii", "check_blocklist"
+    outcome: str  # "blocked" | "redacted" | "allowed" | "detected"
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=_utc_now)
     trace_id: str | None = None

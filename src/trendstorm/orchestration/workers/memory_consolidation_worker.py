@@ -23,6 +23,7 @@ Retry topology:
 Run:
     python -m trendstorm.orchestration.workers.memory_consolidation_worker
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -46,8 +47,7 @@ from trendstorm.orchestration.topics import ConsumerGroup, Topic
 from trendstorm.services.memory.episodic_writer import EpisodicMemoryWriter
 from trendstorm.services.memory.semantic_extractor import SemanticMemoryExtractor
 from trendstorm.shared.config import get_settings
-from trendstorm.shared.errors import NotFoundError, TrendStormError
-from trendstorm.shared.ids import new_id
+from trendstorm.shared.errors import NotFoundError
 from trendstorm.shared.logging import configure_logging, get_logger
 from trendstorm.shared.tracing import configure_tracing, shutdown_tracing
 from trendstorm.shared.tracing.semantics import Attr
@@ -194,7 +194,7 @@ class MemoryConsolidationWorker(BaseConsumer):
             episodic_memory_id=episodic_id,
             semantic_memory_ids=semantic_ids,
         )
-        await self._producer.send_and_wait(
+        await self._producer.producer.send_and_wait(
             Topic.MEMORY_COMPLETED.value,
             value=completed_event.model_dump_json().encode(),
             key=job_id.encode(),
@@ -211,10 +211,11 @@ class MemoryConsolidationWorker(BaseConsumer):
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 async def run_worker() -> None:
     settings = get_settings()
-    configure_logging(settings.app)
-    configure_tracing(settings)
+    configure_logging()
+    configure_tracing(service_name="trendstorm-memory-consolidation")
 
     mongo = MongoClient(settings.mongo)
     await mongo.connect()
@@ -222,9 +223,10 @@ async def run_worker() -> None:
     chroma_memory_store = ChromaMemoryStore(settings.vector)
     await chroma_memory_store.connect()
 
-    from trendstorm.infrastructure.llm.registry import get_embedding_provider, get_chat_provider
-    embed = get_embedding_provider(settings.llm)
-    chat = get_chat_provider(settings.llm, model_preference="extraction")
+    from trendstorm.infrastructure.llm.registry import build_chat_provider, build_embedding_provider
+
+    embed = build_embedding_provider(settings)
+    chat = build_chat_provider(settings)
 
     memory_repo = MongoMemoryRepository(mongo)
     analysis_repo = MongoAnalysisRepository(mongo)
@@ -259,14 +261,14 @@ async def run_worker() -> None:
     )
 
     from trendstorm.infrastructure.metrics.prometheus_server import MetricsServer
+
     metrics_server = MetricsServer()
+    await metrics_server.start()
 
     try:
-        await asyncio.gather(
-            worker.run(),
-            metrics_server.run(),
-        )
+        await worker.run()
     finally:
+        await metrics_server.stop()
         await producer.stop()
         await mongo.close()
         await chroma_memory_store.close()

@@ -1,4 +1,5 @@
 """Memory retrieval service — fetches relevant memories for an Analyst pass."""
+
 from __future__ import annotations
 
 import asyncio
@@ -77,7 +78,7 @@ class MemoryRetriever:
                 Attr.QUERY: query[:200],
             },
         ) as span:
-            embedding = (await self._embed.embed_batch([query], task_type="query"))[0]
+            embedding = (await self._embed.embed_batch([query], task_type="query")).vectors[0]
             collection = memory_collection_name(tenant_id, self._embed.model_id)
 
             hits = await self._vector_store.query_memories(

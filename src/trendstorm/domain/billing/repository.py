@@ -1,4 +1,5 @@
 """Billing domain repository Protocol."""
+
 from __future__ import annotations
 
 from typing import Protocol

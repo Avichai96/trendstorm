@@ -4,6 +4,7 @@ Re-exports all LLM-related errors from shared.errors. The retry wrapper
 (infrastructure/llm/retry.py) catches LLMTransientError; it must NOT
 catch LLMPermanentError or LLMSchemaError.
 """
+
 from __future__ import annotations
 
 from trendstorm.shared.errors import (

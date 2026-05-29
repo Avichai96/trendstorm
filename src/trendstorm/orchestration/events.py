@@ -19,6 +19,7 @@ Every event has a base `EventEnvelope`:
     - occurred_at: when the event was produced.
     - traceparent: W3C trace context (lets us span across services).
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -31,6 +32,7 @@ from trendstorm.shared.ids import new_id
 # ---------------------------------------------------------------------------
 # Embedded sub-models — self-contained wire types, independent of JobState
 # ---------------------------------------------------------------------------
+
 
 class IngestDocRef(BaseModel):
     """Document reference embedded in IngestCompletedEvent.
@@ -52,6 +54,7 @@ class IngestDocRef(BaseModel):
 # Base envelope — present on every event
 # ---------------------------------------------------------------------------
 
+
 class EventEnvelope(BaseModel):
     """Shared envelope fields. Every concrete event extends this."""
 
@@ -71,6 +74,7 @@ class EventEnvelope(BaseModel):
 # ---------------------------------------------------------------------------
 # Concrete events — one per topic
 # ---------------------------------------------------------------------------
+
 
 class JobRequestedEvent(EventEnvelope):
     """Topic: trendstorm.jobs.requested.v1.
@@ -96,7 +100,7 @@ class IngestPendingEvent(EventEnvelope):
 
     event_type: Literal["ingest.pending"] = "ingest.pending"
     job_id: str
-    source_ids: list[str]   # all source IDs for this job
+    source_ids: list[str]  # all source IDs for this job
     attempt: int = 1
 
 
@@ -124,7 +128,7 @@ class KnowledgeDocRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document_id: str
-    blob_uri_text: str   # s3:// URI to the extracted plain-text artifact
+    blob_uri_text: str  # s3:// URI to the extracted plain-text artifact
     category_id: str
     source_id: str
 
@@ -137,7 +141,7 @@ class KnowledgeDocResult(BaseModel):
     document_id: str
     n_chunks: int = 0
     n_vectors: int = 0
-    skipped: bool = False   # True if idempotency hit (already chunked)
+    skipped: bool = False  # True if idempotency hit (already chunked)
 
 
 class KnowledgePendingEvent(EventEnvelope):
@@ -277,9 +281,9 @@ class StreamPartialEvent(EventEnvelope):
 
     event_type: Literal["stream.partial"] = "stream.partial"
     job_id: str
-    stream_event_type: str          # StreamEventType value (e.g. "stage_started")
-    stage: str | None = None        # pipeline stage emitting this event
-    stream_payload: dict[str, object] = Field(   # event-type-specific data
+    stream_event_type: str  # StreamEventType value (e.g. "stage_started")
+    stage: str | None = None  # pipeline stage emitting this event
+    stream_payload: dict[str, object] = Field(  # event-type-specific data
         default_factory=dict
     )
 
@@ -296,7 +300,7 @@ class MemoryPendingEvent(EventEnvelope):
     job_id: str
     analysis_id: str
     category_id: str
-    report_id: str | None = None   # markdown report ID for episodic summary source
+    report_id: str | None = None  # markdown report ID for episodic summary source
     attempt: int = 1
 
 
@@ -312,8 +316,8 @@ class MemoryCompletedEvent(EventEnvelope):
     event_type: Literal["memory.completed"] = "memory.completed"
     job_id: str
     success: bool
-    episodic_memory_id: str | None = None      # ULID of the episodic Memory doc
-    semantic_memory_ids: list[str] = []         # ULIDs of semantic Memory docs
+    episodic_memory_id: str | None = None  # ULID of the episodic Memory doc
+    semantic_memory_ids: list[str] = []  # ULIDs of semantic Memory docs
     error_code: str | None = None
     error_message: str | None = None
 
@@ -353,7 +357,7 @@ class ReviewResolvedEvent(EventEnvelope):
     event_type: Literal["review.resolved"] = "review.resolved"
     job_id: str
     review_id: str
-    decision: str         # ReviewDecision value
+    decision: str  # ReviewDecision value
     comment: str | None = None
     resolved_by: str | None = None
 
@@ -365,13 +369,19 @@ class ReviewResolvedEvent(EventEnvelope):
 
 AnyEvent = Annotated[
     JobRequestedEvent
-    | IngestPendingEvent | IngestCompletedEvent
-    | KnowledgePendingEvent | KnowledgeCompletedEvent
-    | AnalysisPendingEvent | AnalysisCompletedEvent
-    | PublishPendingEvent | PublishCompletedEvent
+    | IngestPendingEvent
+    | IngestCompletedEvent
+    | KnowledgePendingEvent
+    | KnowledgeCompletedEvent
+    | AnalysisPendingEvent
+    | AnalysisCompletedEvent
+    | PublishPendingEvent
+    | PublishCompletedEvent
     | StreamPartialEvent
     | EvalSampleEvent
-    | ReviewRequestedEvent | ReviewResolvedEvent
-    | MemoryPendingEvent | MemoryCompletedEvent,
+    | ReviewRequestedEvent
+    | ReviewResolvedEvent
+    | MemoryPendingEvent
+    | MemoryCompletedEvent,
     Field(discriminator="event_type"),
 ]

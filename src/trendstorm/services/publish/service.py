@@ -5,6 +5,7 @@ Report row with the blob_uri so the API can serve download links.
 
 Rendering order: Markdown first (canonical), then derive PDF + JSON.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -29,7 +30,7 @@ class PublishResult:
     """IDs of the persisted Report rows (one per format)."""
 
     markdown_report_id: str
-    pdf_report_id: str | None   # None if weasyprint fails
+    pdf_report_id: str | None  # None if weasyprint fails
     json_report_id: str
 
 
@@ -62,12 +63,12 @@ class PublisherService:
         bucket = self._blob_settings.bucket_reports
 
         # Step 1: Markdown (canonical source of truth).
-        md_text = self._renderer.render_markdown(
-            analysis, category_name=category.name
-        )
+        md_text = self._renderer.render_markdown(analysis, category_name=category.name)
         md_id = new_id()
         md_key = report_key(analysis.tenant_id, analysis.job_id, md_id, fmt="md")
-        md_uri = await self._minio.upload(bucket, md_key, md_text.encode("utf-8"), content_type="text/markdown")
+        md_uri = await self._minio.upload(
+            bucket, md_key, md_text.encode("utf-8"), content_type="text/markdown"
+        )
         md_report = Report(
             id=md_id,
             tenant_id=analysis.tenant_id,
@@ -85,7 +86,9 @@ class PublisherService:
         json_bytes = self._renderer.render_json(analysis)
         json_id = new_id()
         json_key = report_key(analysis.tenant_id, analysis.job_id, json_id, fmt="json")
-        json_uri = await self._minio.upload(bucket, json_key, json_bytes, content_type="application/json")
+        json_uri = await self._minio.upload(
+            bucket, json_key, json_bytes, content_type="application/json"
+        )
         json_report = Report(
             id=json_id,
             tenant_id=analysis.tenant_id,
@@ -105,7 +108,9 @@ class PublisherService:
             pdf_bytes = self._renderer.render_pdf(md_text)
             pdf_id = new_id()
             pdf_key = report_key(analysis.tenant_id, analysis.job_id, pdf_id, fmt="pdf")
-            pdf_uri = await self._minio.upload(bucket, pdf_key, pdf_bytes, content_type="application/pdf")
+            pdf_uri = await self._minio.upload(
+                bucket, pdf_key, pdf_bytes, content_type="application/pdf"
+            )
             pdf_report = Report(
                 id=pdf_id,
                 tenant_id=analysis.tenant_id,

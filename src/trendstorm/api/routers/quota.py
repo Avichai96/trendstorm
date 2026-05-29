@@ -6,10 +6,11 @@ The quota check on job creation is enforced by JobService (via QuotaService).
 This endpoint exposes the current status so clients can show usage meters
 without attempting a job create and getting a 402.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, ConfigDict
+from trendstorm_shared import QuotaResponse
 
 from trendstorm.api.deps import MongoDep
 from trendstorm.utils.headers_docs import require_tenant
@@ -19,17 +20,6 @@ router = APIRouter(
     tags=["quota"],
     dependencies=[Depends(require_tenant)],
 )
-
-
-class QuotaResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    allowed: bool
-    monthly_spend_usd: float
-    monthly_limit_usd: float
-    jobs_this_month: int
-    jobs_limit: int
-    reason: str | None = None
 
 
 @router.get(

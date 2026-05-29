@@ -13,6 +13,7 @@ Chat (gpt-4o-mini, gpt-4o, etc.):
     response_format=json_schema is supported via complete_with_json_schema()
     as a strict alternative to tool use (no extra round-trip needed for parsing).
 """
+
 from __future__ import annotations
 
 import json
@@ -55,7 +56,9 @@ def _map_openai_error(exc: Exception) -> NoReturn:
         raise LLMRateLimitError(str(exc)) from exc
     if isinstance(exc, openai.APITimeoutError):
         raise LLMTimeoutError(str(exc)) from exc
-    if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError, openai.BadRequestError)):
+    if isinstance(
+        exc, (openai.AuthenticationError, openai.PermissionDeniedError, openai.BadRequestError)
+    ):
         raise LLMPermanentError(str(exc)) from exc
     if isinstance(exc, openai.APIStatusError):
         if exc.status_code >= 500:

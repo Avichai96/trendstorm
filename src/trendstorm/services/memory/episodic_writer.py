@@ -4,6 +4,7 @@ Episodic memory does NOT go through HITL review. It is a factual log of what
 happened (which job, which analysis summary, what score), not a claim about the
 world. It is safe to write unconditionally after a successful publish.
 """
+
 from __future__ import annotations
 
 import time
@@ -16,9 +17,8 @@ from trendstorm.infrastructure.vectors.chroma_memory_store import (
     ChromaMemoryStore,
     memory_collection_name,
 )
-from trendstorm.shared.ids import new_id
 from trendstorm.shared.logging import get_logger
-from trendstorm.shared.metrics.registry import METRICS, StatusLabel, tenant_id_hash
+from trendstorm.shared.metrics.registry import METRICS, StatusLabel
 from trendstorm.shared.tracing.semantics import Attr
 
 if TYPE_CHECKING:
@@ -95,7 +95,7 @@ class EpisodicMemoryWriter:
 
                 # Embed and upsert to ChromaDB.
                 embeddings = await self._embed.embed_batch([content])
-                embedding = embeddings[0]
+                embedding = embeddings.vectors[0]
                 collection = memory_collection_name(tenant_id, self._embed.model_id)
                 await self._vector_store.upsert_memory(
                     collection=collection,

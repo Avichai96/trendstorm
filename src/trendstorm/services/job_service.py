@@ -23,6 +23,7 @@ Kafka publish eventually happens (relay retries). The window between "user sees
 job PENDING" and "job actually starts processing" depends on relay poll interval
 (default 500ms). This is acceptable.
 """
+
 from __future__ import annotations
 
 import json
@@ -127,7 +128,10 @@ class JobService:
             # If it succeeds, the relay publishes the outbox entry to Kafka within
             # poll_interval (default 500ms).
             try:
-                async with await self._mongo.client.start_session() as session, session.start_transaction():
+                async with (
+                    await self._mongo.client.start_session() as session,
+                    session.start_transaction(),
+                ):
                     await self._jobs.insert(job, session=session)
                     await self._outbox.insert(outbox_entry, session=session)
             except Exception as e:

@@ -1,4 +1,5 @@
 """Base class for all resource objects."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

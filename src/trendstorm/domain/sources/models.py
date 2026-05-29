@@ -30,6 +30,7 @@ We do NOT store:
 - The fetched content itself (lives in `raw_documents`).
 - Credentials (those go in `secrets/`, encrypted, Phase 12).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -48,10 +49,21 @@ from trendstorm.shared.types import SourceType
 
 # Strip these tracking params before hashing — they don't affect the
 # resource identity but cause cache misses.
-_TRACKING_PARAMS = frozenset({
-    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-    "gclid", "fbclid", "mc_cid", "mc_eid", "_ga", "ref",
-})
+_TRACKING_PARAMS = frozenset(
+    {
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+        "gclid",
+        "fbclid",
+        "mc_cid",
+        "mc_eid",
+        "_ga",
+        "ref",
+    }
+)
 
 
 def canonicalize_url(raw: str) -> str:
@@ -78,7 +90,8 @@ def canonicalize_url(raw: str) -> str:
 
     # Filter + sort query params for stability.
     params = [
-        (k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+        (k, v)
+        for k, v in parse_qsl(parts.query, keep_blank_values=True)
         if k.lower() not in _TRACKING_PARAMS
     ]
     params.sort()
@@ -100,6 +113,7 @@ def url_hash(canonical: str) -> str:
 # Model
 # ---------------------------------------------------------------------------
 
+
 class Source(BaseModel):
     """A registered data source within a Category."""
 
@@ -110,7 +124,7 @@ class Source(BaseModel):
     category_id: str
 
     url: str = Field(..., min_length=4, max_length=4096)
-    url_hash: str = ""           # populated by validator; never set manually
+    url_hash: str = ""  # populated by validator; never set manually
     label: str | None = Field(default=None, max_length=200)
     type: SourceType = SourceType.HTTP
 

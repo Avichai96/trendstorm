@@ -11,6 +11,7 @@ Why XADD/XRANGE over a Redis List?
     - Redis Streams are append-only by design — fits the event-log pattern.
     - Entries can carry multiple fields in one command (no JSON wrapping needed).
 """
+
 from __future__ import annotations
 
 import json

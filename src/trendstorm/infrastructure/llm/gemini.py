@@ -14,6 +14,7 @@ GeminiChatProvider:
     with different semantics; we do not expose it here.
     Tool use via function_declarations → FunctionDeclaration → GenerateContentConfig.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -127,7 +128,9 @@ class GeminiEmbeddingProvider:
         if not texts:
             return EmbeddingBatchResult(vectors=[], input_tokens=0, model_id=self.model_id)
 
-        logger.debug("gemini.embed_batch", n_texts=len(texts), model=self._model, task_type=task_type)
+        logger.debug(
+            "gemini.embed_batch", n_texts=len(texts), model=self._model, task_type=task_type
+        )
 
         try:
             response = await asyncio.to_thread(self._call_sync, texts, task_type)
@@ -271,12 +274,20 @@ class GeminiChatProvider:
         Returns (tool_name, tool_input, token_usage) where token_usage carries
         prompt/candidates token counts from usage_metadata.
         """
-        logger.debug("gemini.complete_with_tools", model=self._model, tools=[t.get("name") for t in tools])
+        logger.debug(
+            "gemini.complete_with_tools", model=self._model, tools=[t.get("name") for t in tools]
+        )
         try:
             name, args, in_tok, out_tok = await asyncio.to_thread(
                 self._tool_sync, messages, tools, tool_choice
             )
-        except (LLMRateLimitError, LLMTimeoutError, LLMPermanentError, LLMTransientError, LLMSchemaError):
+        except (
+            LLMRateLimitError,
+            LLMTimeoutError,
+            LLMPermanentError,
+            LLMTransientError,
+            LLMSchemaError,
+        ):
             raise
         except Exception as exc:
             _map_gemini_error(exc)
@@ -365,13 +376,12 @@ class GeminiChatProvider:
             )
             tc = types.ToolConfig(function_calling_config=fn_config)
         else:
-            tc = types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(mode="AUTO")
-            )
+            tc = types.ToolConfig(function_calling_config=types.FunctionCallingConfig(mode="AUTO"))
 
         contents, base_config = self._build_contents_and_config(messages)
         # Re-build with tool settings added.
         from google.genai import types as _t
+
         config = _t.GenerateContentConfig(
             system_instruction=getattr(base_config, "system_instruction", None),
             max_output_tokens=self._max_output_tokens,
@@ -389,8 +399,8 @@ class GeminiChatProvider:
         out_tok = getattr(usage, "candidates_token_count", 0) or 0
 
         # Extract the first function_call part.
-        for candidate in (response.candidates or []):
-            for part in (candidate.content.parts if candidate.content else []):
+        for candidate in response.candidates or []:
+            for part in candidate.content.parts if candidate.content else []:
                 fc = getattr(part, "function_call", None)
                 if fc:
                     return fc.name, dict(fc.args), in_tok, out_tok

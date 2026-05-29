@@ -45,6 +45,9 @@ markers = [
     "staging: requires staging environment; runs only on main-branch CI",
 ]
 
+[tool.uv.sources]
+trendstorm-shared = { path = "../../packages/trendstorm-shared", editable = true }
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

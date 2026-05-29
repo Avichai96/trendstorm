@@ -15,6 +15,7 @@ Redis compiles it once per connection (EVALSHA after the first EVAL).
 
 Key format:  scout:rl:{tenant_id}:{host}
 """
+
 from __future__ import annotations
 
 import time

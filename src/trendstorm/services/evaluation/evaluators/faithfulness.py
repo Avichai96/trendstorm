@@ -16,6 +16,7 @@ Evidence construction:
     if an example is provided, otherwise from the retrieved_chunks kwarg
     (callers must provide one or the other).
 """
+
 from __future__ import annotations
 
 import importlib.resources
@@ -92,7 +93,9 @@ class LLMPanelFaithfulnessEvaluator:
 
             if not analysis.insights:
                 score = 1.0
-                return _build_result(analysis, score, passed=True, rationale="no insights to evaluate")
+                return _build_result(
+                    analysis, score, passed=True, rationale="no insights to evaluate"
+                )
 
             per_insight_scores: list[float] = []
 
@@ -136,6 +139,7 @@ class LLMPanelFaithfulnessEvaluator:
 # ---------------------------------------------------------------------------
 # Pure helpers
 # ---------------------------------------------------------------------------
+
 
 def _build_chunk_index(example: GoldenExample | None) -> dict[str, str]:
     """Build chunk_id → text mapping from GoldenExample chunks, if provided."""

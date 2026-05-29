@@ -34,6 +34,7 @@ Why not just one big chunk size?
     (200 tokens). LLM context quality is best with longer, narratively
     complete chunks (1000+ tokens). Parent-child gets you both.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -50,10 +51,10 @@ class Chunk(BaseModel):
 
     id: str = Field(default_factory=new_id)
     tenant_id: str
-    job_id: str            # which job created this chunk (for cleanup + auditing)
-    category_id: str       # denormalized for the vector store's metadata filter
-    document_id: str       # parent RawDocument
-    source_id: str         # denormalized; saves a join when displaying provenance
+    job_id: str  # which job created this chunk (for cleanup + auditing)
+    category_id: str  # denormalized for the vector store's metadata filter
+    document_id: str  # parent RawDocument
+    source_id: str  # denormalized; saves a join when displaying provenance
 
     # Position within the document, 0-indexed. Used for stitching context.
     position: int = Field(..., ge=0)

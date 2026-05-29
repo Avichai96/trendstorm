@@ -16,6 +16,7 @@ Key operations:
   Revoke the old key and create a new one in a single operation. The old
   key stops working immediately.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -96,7 +97,12 @@ class AuthService:
             tenant_id = self._jwt.extract_tenant_id(payload)
             # Roles from JWT "roles" claim (standard OIDC custom claim).
             raw_roles = payload.get("roles", [])
-            roles = [raw_roles] if isinstance(raw_roles, str) else list(raw_roles)
+            if isinstance(raw_roles, str):
+                roles: list[str] = [raw_roles]
+            elif isinstance(raw_roles, list):
+                roles = [str(r) for r in raw_roles]
+            else:
+                roles = []
             return AuthContext(
                 tenant_id=tenant_id,
                 subject=payload.get("sub"),

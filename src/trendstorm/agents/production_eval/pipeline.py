@@ -12,6 +12,7 @@ Design decisions:
 - The pipeline is agnostic to which evaluators are passed in — the worker
   decides which evaluators to instantiate based on available API keys.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -144,11 +145,7 @@ class ProductionEvalPipeline:
                     error=str(exc),
                 )
 
-        aggregate = (
-            sum(ds.score for ds in all_scores) / len(all_scores)
-            if all_scores
-            else 0.0
-        )
+        aggregate = sum(ds.score for ds in all_scores) / len(all_scores) if all_scores else 0.0
 
         return EvaluationResult(
             tenant_id=analysis.tenant_id,
@@ -161,6 +158,7 @@ class ProductionEvalPipeline:
 
 def _stub_result(tenant_id: str, analysis_id: str, job_id: str) -> EvaluationResult:
     from trendstorm.domain.evaluation.models import EvaluationResult
+
     return EvaluationResult(
         tenant_id=tenant_id,
         analysis_id=analysis_id,

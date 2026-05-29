@@ -17,6 +17,7 @@ SIGTERM is caught; the relay loop is cancelled cleanly.
 Run:
     python -m trendstorm.orchestration.workers.outbox_relay_worker
 """
+
 from __future__ import annotations
 
 import asyncio

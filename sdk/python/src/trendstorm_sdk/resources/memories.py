@@ -2,6 +2,7 @@
 
 Requires API key with the ``tenant_admin`` role.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field

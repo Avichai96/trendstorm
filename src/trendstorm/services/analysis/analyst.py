@@ -12,6 +12,7 @@ Refinement protocol:
       the next pass actually searches for different evidence.
     - The Analyst itself does NOT loop. The orchestrator owns the loop.
 """
+
 from __future__ import annotations
 
 import importlib.resources
@@ -148,9 +149,7 @@ class Analyst:
         self._settings = settings
         self._memory_retriever = memory_retriever
         self._memory_final_k = memory_final_k
-        self._prompt: str = (
-            _prompt_text if _prompt_text is not None else _load_analyst_prompt()
-        )
+        self._prompt: str = _prompt_text if _prompt_text is not None else _load_analyst_prompt()
 
     async def produce_analysis(
         self,
@@ -179,6 +178,7 @@ class Analyst:
 
             # 1. Retrieve chunks + memories in parallel (memories are optional).
             import asyncio as _asyncio
+
             with tracer.start_as_current_span("analysis.retrieve"):
                 request = RetrievalRequest(
                     query=retrieval_query,
@@ -241,7 +241,10 @@ class Analyst:
             )
 
             span.set_attribute("analyst.validator_score", validation.score)
-            span.set_attribute("analyst.meets_threshold", validation.meets_threshold(self._settings.validator_threshold))
+            span.set_attribute(
+                "analyst.meets_threshold",
+                validation.meets_threshold(self._settings.validator_threshold),
+            )
             logger.info(
                 "analyst_pass_done",
                 refinement_loop=refinement_loop,
@@ -373,20 +376,21 @@ def _build_analysis_from_tool_args(
         if not isinstance(raw, dict):
             continue
         supporting = [
-            cid for cid in (raw.get("supporting_chunk_ids") or [])
-            if cid in valid_chunk_ids
+            cid for cid in (raw.get("supporting_chunk_ids") or []) if cid in valid_chunk_ids
         ]
         if not supporting:
             # An insight with zero valid citations cannot be grounded — drop.
             continue
         try:
-            insights.append(Insight(
-                claim=str(raw.get("claim", "")).strip(),
-                rationale=raw.get("rationale"),
-                supporting_chunk_ids=supporting,
-                confidence=float(raw.get("confidence", 0.5)),
-                tags=list(raw.get("tags") or []),
-            ))
+            insights.append(
+                Insight(
+                    claim=str(raw.get("claim", "")).strip(),
+                    rationale=raw.get("rationale"),
+                    supporting_chunk_ids=supporting,
+                    confidence=float(raw.get("confidence", 0.5)),
+                    tags=list(raw.get("tags") or []),
+                )
+            )
         except (ValueError, TypeError):
             continue
 
@@ -402,13 +406,15 @@ def _build_analysis_from_tool_args(
         seen_cite_ids.add(cid)
         excerpt = str(raw.get("excerpt", ""))[:500]  # Citation max is 500
         try:
-            citations.append(Citation(
-                chunk_id=cid,
-                document_id=str(raw.get("document_id", "")),
-                source_id=str(raw.get("source_id", "")),
-                excerpt=excerpt,
-                url=raw.get("url"),
-            ))
+            citations.append(
+                Citation(
+                    chunk_id=cid,
+                    document_id=str(raw.get("document_id", "")),
+                    source_id=str(raw.get("source_id", "")),
+                    excerpt=excerpt,
+                    url=raw.get("url"),
+                )
+            )
         except (ValueError, TypeError):
             continue
 

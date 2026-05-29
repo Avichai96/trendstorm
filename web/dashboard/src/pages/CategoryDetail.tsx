@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { JobStatusBadge } from "@/components/shared/StatusBadge";
 import { ArrowLeft, ExternalLink } from "lucide-react";
-import { formatRelative, formatCurrency } from "@/lib/utils";
+import { formatRelative } from "@/lib/utils";
 
 function safeHostname(url: string): string {
   try {
@@ -117,7 +117,7 @@ export default function CategoryDetail() {
             {recentJobs.map((job) => (
               <Link
                 key={job.id}
-                to={`/jobs/${job.job_id}`}
+                to={`/jobs/${job.id}`}
                 className="flex items-center justify-between rounded-md border p-2 text-sm hover:bg-accent"
               >
                 <div>
@@ -127,7 +127,7 @@ export default function CategoryDetail() {
                   </p>
                 </div>
                 <span className="text-xs font-mono text-muted-foreground">
-                  {formatCurrency(job.cost_usd)}
+                  {job.metrics.documents_ingested} docs
                 </span>
               </Link>
             ))}

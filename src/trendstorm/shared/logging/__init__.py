@@ -28,6 +28,7 @@ Output (JSON):
       "path": "/jobs"
     }
 """
+
 from __future__ import annotations
 
 import logging
@@ -80,6 +81,7 @@ def get_correlation_id() -> str | None:
 # Order matters: each processor can mutate the event_dict.
 # ---------------------------------------------------------------------------
 
+
 def _add_log_context(_: Any, __: str, event_dict: EventDict) -> EventDict:
     """Inject contextvars (correlation_id, tenant_id, user_id) into every log."""
     if (cid := _correlation_id_var.get()) is not None:
@@ -116,13 +118,24 @@ def _drop_color_message_key(_: Any, __: str, event_dict: EventDict) -> EventDict
 
 
 # Sensitive header/field names that must never appear in logs.
-_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset({
-    "authorization", "cookie", "set-cookie",
-    "api_key", "api-key", "x-api-key",
-    "password", "secret", "token",
-    "anthropic_api_key", "openai_api_key", "cohere_api_key",
-    "mongo_uri", "redis_url",
-})
+_SENSITIVE_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "api_key",
+        "api-key",
+        "x-api-key",
+        "password",
+        "secret",
+        "token",
+        "anthropic_api_key",
+        "openai_api_key",
+        "cohere_api_key",
+        "mongo_uri",
+        "redis_url",
+    }
+)
 
 
 def _redact_sensitive(_: Any, __: str, event_dict: EventDict) -> EventDict:
@@ -140,6 +153,7 @@ def _redact_sensitive(_: Any, __: str, event_dict: EventDict) -> EventDict:
 # ---------------------------------------------------------------------------
 # Configuration entry point — call once at app startup
 # ---------------------------------------------------------------------------
+
 
 def configure_logging() -> None:
     """Configure structlog and stdlib logging.
@@ -166,7 +180,9 @@ def configure_logging() -> None:
     if settings.app.log_format == LogFormat.JSON:
         renderer: Processor = structlog.processors.JSONRenderer()
     else:
-        renderer = structlog.dev.ConsoleRenderer(colors=True, exception_formatter=structlog.dev.RichTracebackFormatter())
+        renderer = structlog.dev.ConsoleRenderer(
+            colors=True, exception_formatter=structlog.dev.RichTracebackFormatter()
+        )
 
     # Structlog config — used by code that imports structlog directly
     structlog.configure(

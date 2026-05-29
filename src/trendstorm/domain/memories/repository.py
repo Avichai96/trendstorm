@@ -1,4 +1,5 @@
 """MemoryRepository Protocol — long-term memory persistence contract."""
+
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
@@ -65,4 +66,8 @@ class MemoryRepository(Protocol):
 
     async def deactivate(self, tenant_id: str, memory_id: str) -> None:
         """Soft-delete (set is_active=False). Used by the DELETE API endpoint."""
+        ...
+
+    async def exists_for_job(self, tenant_id: str, job_id: str) -> bool:
+        """Return True if any memory was already extracted for this job (idempotency check)."""
         ...

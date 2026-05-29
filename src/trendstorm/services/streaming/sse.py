@@ -24,6 +24,7 @@ SSE wire format (W3C EventSource spec):
 Heartbeats are SSE comments (": heartbeat\\n\\n") — browsers keep the
 connection alive but don't fire message events.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -47,12 +48,7 @@ def _format_sse(payload: dict[str, Any]) -> str:
     """Format a payload dict as a W3C SSE string."""
     seq = payload.get("seq", 0)
     event_type = payload.get("event_type", "message")
-    return (
-        f"id: {seq}\n"
-        f"event: {event_type}\n"
-        f"data: {json.dumps(payload)}\n"
-        "\n"
-    )
+    return f"id: {seq}\nevent: {event_type}\ndata: {json.dumps(payload)}\n\n"
 
 
 def _heartbeat() -> str:

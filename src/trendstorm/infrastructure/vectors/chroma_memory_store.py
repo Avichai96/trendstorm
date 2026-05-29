@@ -10,6 +10,7 @@ Kept separate from the chunk store (chroma_store.py) because:
     - Separate collections prevent score pollution between short-lived
       chunk evidence and long-lived memory claims during RRF merging.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -64,6 +65,7 @@ class ChromaMemoryStore:
         if self._client is not None:
             return
         import chromadb  # deferred
+
         self._client = await chromadb.AsyncHttpClient(
             host=self._settings.chroma_host,
             port=self._settings.chroma_port,
@@ -134,7 +136,9 @@ class ChromaMemoryStore:
         ]
         if kind is not None:
             where_clauses.append({"kind": {"$eq": kind}})
-        where: dict[str, Any] = {"$and": where_clauses} if len(where_clauses) > 1 else where_clauses[0]
+        where: dict[str, Any] = (
+            {"$and": where_clauses} if len(where_clauses) > 1 else where_clauses[0]
+        )
 
         try:
             results = await coll.query(

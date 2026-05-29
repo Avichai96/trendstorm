@@ -19,6 +19,7 @@ The generator closes the underlying httpx stream on:
   - Max reconnects exhausted
   - ``HeartbeatTimeout`` (no event for ``heartbeat_timeout`` seconds)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,7 +30,6 @@ from dataclasses import dataclass, field
 import httpx
 
 from trendstorm_shared.models import StreamEvent
-from trendstorm_shared.types import StreamEventType
 
 from ._errors import HeartbeatTimeout, StreamError
 
@@ -43,6 +43,7 @@ _RECONNECT_DELAY = 1.0
 @dataclass
 class _SSEFrame:
     """Raw parsed SSE frame before JSON decoding."""
+
     id: str | None = None
     event: str | None = None
     data_lines: list[str] = field(default_factory=list)
@@ -123,10 +124,15 @@ class SSEStream:
             except (httpx.StreamError, httpx.ConnectError, httpx.ReadTimeout) as exc:
                 reconnects += 1
                 if reconnects > self._max_reconnects:
-                    raise StreamError(f"SSE stream failed after {self._max_reconnects} reconnects: {exc}") from exc
+                    raise StreamError(
+                        f"SSE stream failed after {self._max_reconnects} reconnects: {exc}"
+                    ) from exc
                 logger.warning(
                     "SSE connection dropped (%s); reconnecting in %.1fs (attempt %d/%d)",
-                    exc, _RECONNECT_DELAY, reconnects, self._max_reconnects,
+                    exc,
+                    _RECONNECT_DELAY,
+                    reconnects,
+                    self._max_reconnects,
                 )
                 await asyncio.sleep(_RECONNECT_DELAY)
 
@@ -142,7 +148,9 @@ class SSEStream:
         async with self._client.stream("GET", self._url, headers=headers) as response:
             if not response.is_success:
                 body = await response.aread()
-                raise StreamError(f"SSE endpoint returned HTTP {response.status_code}: {body[:200]}")
+                raise StreamError(
+                    f"SSE endpoint returned HTTP {response.status_code}: {body[:200]}"
+                )
 
             buffer: list[str] = []
             async for line in self._aiter_lines_with_timeout(response):
@@ -156,10 +164,9 @@ class SSEStream:
                             yield event
                     buffer.clear()
 
-    async def _aiter_lines_with_timeout(
-        self, response: httpx.Response
-    ) -> AsyncIterator[str]:
+    async def _aiter_lines_with_timeout(self, response: httpx.Response) -> AsyncIterator[str]:
         """Yield lines with per-line heartbeat timeout enforcement."""
+
         async def _inner() -> AsyncIterator[str]:
             async for line in response.aiter_lines():
                 yield line

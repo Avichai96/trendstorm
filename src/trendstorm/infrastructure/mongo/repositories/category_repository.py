@@ -1,4 +1,5 @@
 """MongoDB implementation of CategoryRepository."""
+
 from __future__ import annotations
 
 from typing import ClassVar
@@ -101,7 +102,7 @@ class MongoCategoryRepository(TenantScopedRepository[Category]):
             doc = await self._coll.find_one_and_update(
                 self._tenant_query(tenant_id, _id=category_id),
                 {"$set": update_set},
-                return_document=True,    # returnDocument=AFTER
+                return_document=True,  # returnDocument=AFTER
             )
         except PyMongoError as e:
             raise_db_error(e, operation="update category", category_id=category_id)
@@ -110,9 +111,7 @@ class MongoCategoryRepository(TenantScopedRepository[Category]):
     async def count_by_tenant(self, tenant_id: str) -> int:
         """Count non-archived categories. Used by quota checks + dashboards."""
         try:
-            return await self._coll.count_documents(
-                self._tenant_query(tenant_id, archived=False)
-            )
+            return await self._coll.count_documents(self._tenant_query(tenant_id, archived=False))
         except PyMongoError as e:
             raise_db_error(e, operation="count categories", tenant_id=tenant_id)
             return 0  # unreachable

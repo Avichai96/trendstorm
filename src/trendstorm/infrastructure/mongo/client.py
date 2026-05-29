@@ -14,6 +14,7 @@ Why a wrapper class instead of a module-level client?
     - Testability: tests inject a mock client.
     - Multiple clients: future support for sharded reads, separate logs DB, etc.
 """
+
 from __future__ import annotations
 
 import asyncio

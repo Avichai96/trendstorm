@@ -1,4 +1,5 @@
 """Sources resource — register and manage data sources."""
+
 from __future__ import annotations
 
 from trendstorm_shared.models import SourceListResponse, SourceResponse
@@ -44,10 +45,7 @@ class SourcesResource(AsyncAPIResource):
         type: SourceType = SourceType.HTTP,
     ) -> list[SourceResponse]:
         """Register multiple source URLs sequentially. Returns all created sources."""
-        return [
-            await self.add(category_id=category_id, url=url, type=type)
-            for url in urls
-        ]
+        return [await self.add(category_id=category_id, url=url, type=type) for url in urls]
 
     async def get(self, source_id: str) -> SourceResponse:
         """Fetch a single source by ID."""

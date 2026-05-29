@@ -1,4 +1,5 @@
 """MongoDB implementation of AnalysisRepository."""
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -51,7 +52,7 @@ class MongoAnalysisRepository(TenantScopedRepository[Analysis]):
         (same pattern as MongoReviewRepository.list_expired_pending). Only
         called by the backfill script, never from business-logic paths.
         """
-        query: dict = {"validator_passed": True}
+        query: dict[str, object] = {"validator_passed": True}
         if tenant_id is not None:
             query["tenant_id"] = tenant_id
         if category_id is not None:
@@ -83,8 +84,6 @@ class MongoAnalysisRepository(TenantScopedRepository[Analysis]):
             }
         }
         try:
-            await self._coll.update_one(
-                self._tenant_query(tenant_id, _id=analysis_id), update
-            )
+            await self._coll.update_one(self._tenant_query(tenant_id, _id=analysis_id), update)
         except PyMongoError as e:
             raise_db_error(e, operation="update_validation", analysis_id=analysis_id)

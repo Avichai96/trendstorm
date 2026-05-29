@@ -4,6 +4,7 @@ Notable rule: registering a source REQUIRES the category to exist within
 the same tenant. We always verify by looking up the category first.
 This prevents orphan sources from cluttering the DB.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -69,7 +70,10 @@ class SourceService:
             # 2. Cap check. We do a cheap count rather than an arithmetic
             # counter for now — the cap is loose and reads are infrequent.
             existing = await self._sources.list_by_category(
-                tenant_id, category_id, enabled_only=False, limit=MAX_SOURCES_PER_CATEGORY + 1,
+                tenant_id,
+                category_id,
+                enabled_only=False,
+                limit=MAX_SOURCES_PER_CATEGORY + 1,
             )
             if len(existing) >= MAX_SOURCES_PER_CATEGORY:
                 raise ValidationError(
@@ -136,5 +140,7 @@ class SourceService:
         if await self._categories.get(tenant_id, category_id) is None:
             raise NotFoundError(f"Category {category_id} not found")
         return await self._sources.list_by_category(
-            tenant_id, category_id, enabled_only=enabled_only,
+            tenant_id,
+            category_id,
+            enabled_only=enabled_only,
         )

@@ -7,6 +7,7 @@ avoiding redundant storage and re-embedding of identical content.
 This is intentionally a module-level pure function so it can be tested
 without any infrastructure and called from multiple pipeline stages.
 """
+
 from __future__ import annotations
 
 import hashlib

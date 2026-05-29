@@ -9,18 +9,19 @@ decision through the outbox pattern (Mongo-atomic write + outbox entry) rather
 than publishing to Kafka directly, maintaining the same atomicity guarantee as
 job creation.
 """
+
 from __future__ import annotations
 
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query, Request, status
-from pydantic import BaseModel, ConfigDict, Field
+from trendstorm_shared import ResolveReviewRequest, ReviewResponse
 
-from trendstorm.api.deps import MongoDep, SettingsDep
+from trendstorm.api.deps import MongoDep
 from trendstorm.domain.outbox.models import OutboxEntry
-from trendstorm.domain.reviews.models import ReviewDecision, ReviewRequest, ReviewStatus
+from trendstorm.domain.reviews.models import ReviewDecision as DomainReviewDecision
+from trendstorm.domain.reviews.models import ReviewRequest, ReviewStatus
 from trendstorm.infrastructure.mongo.repositories import MongoReviewRepository
-from trendstorm.infrastructure.mongo.repositories._base import now_utc
 from trendstorm.infrastructure.mongo.repositories.outbox_repository import (
     MongoOutboxRepository,
 )
@@ -36,60 +37,39 @@ logger = get_logger(__name__)
 router = APIRouter(
     prefix="/v1/reviews",
     tags=["reviews"],
-    dependencies=[require_tenant, require_role("reviewer")],
+    dependencies=[Depends(require_tenant), require_role("reviewer")],
 )
 
 
 # ---------------------------------------------------------------------------
-# Schemas
+# Domain → wire-format helper
 # ---------------------------------------------------------------------------
 
-class ReviewResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
 
-    id: str
-    job_id: str
-    analysis_id: str
-    stage_under_review: str
-    status: ReviewStatus
-    reviewer_id: str | None
-    decision_comment: str | None
-    created_at: str
-    resolved_at: str | None
-    timeout_at: str
-    sla_seconds: int
-
-    @classmethod
-    def from_domain(cls, r: ReviewRequest) -> "ReviewResponse":
-        return cls(
-            id=r.id,
-            job_id=r.job_id,
-            analysis_id=r.analysis_id,
-            stage_under_review=r.stage_under_review,
-            status=r.status,
-            reviewer_id=r.reviewer_id,
-            decision_comment=r.decision_comment,
-            created_at=r.created_at.isoformat(),
-            resolved_at=r.resolved_at.isoformat() if r.resolved_at else None,
-            timeout_at=r.timeout_at.isoformat(),
-            sla_seconds=r.sla_seconds,
-        )
-
-
-class ResolveReviewRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    decision: ReviewDecision
-    comment: str | None = Field(
-        default=None,
-        max_length=2000,
-        description="Required when decision=request_refinement; fed to the next analyst pass.",
+def _review_to_response(r: ReviewRequest) -> ReviewResponse:
+    return ReviewResponse(
+        id=r.id,
+        job_id=r.job_id,
+        analysis_id=r.analysis_id,
+        stage_under_review=r.stage_under_review,
+        status=r.status,
+        reviewer_id=r.reviewer_id,
+        decision_comment=r.decision_comment,
+        created_at=r.created_at,
+        resolved_at=r.resolved_at,
+        timeout_at=r.timeout_at,
+        sla_seconds=r.sla_seconds,
+        validator_score=r.validator_score,
+        refinement_loops_used=r.refinement_loops_used,
+        cost_usd_so_far_cents=r.cost_usd_so_far_cents,
+        flagging_reason=r.flagging_reason,
     )
 
 
 # ---------------------------------------------------------------------------
 # Dependency helpers
 # ---------------------------------------------------------------------------
+
 
 def _get_review_repo(mongo: MongoDep) -> MongoReviewRepository:
     return MongoReviewRepository(mongo)
@@ -104,7 +84,7 @@ OutboxRepoDep = Annotated[MongoOutboxRepository, Depends(_get_outbox_repo)]
 
 
 def _tenant_id(request: Request) -> str:
-    return request.state.tenant_id
+    return str(request.state.tenant_id)
 
 
 def _principal_id(request: Request) -> str | None:
@@ -112,12 +92,15 @@ def _principal_id(request: Request) -> str | None:
     ctx = getattr(request.state, "auth_context", None)
     if ctx is None:
         return None
-    return ctx.key_id or ctx.subject
+    key_id: str | None = getattr(ctx, "key_id", None)
+    subject: str | None = getattr(ctx, "subject", None)
+    return key_id or subject
 
 
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
 
 @router.get("", summary="List reviews for the tenant")
 async def list_reviews(
@@ -131,7 +114,7 @@ async def list_reviews(
     reviews = await repo.list_for_tenant(
         tenant_id, status=status_filter, limit=limit, before_id=before_id
     )
-    return [ReviewResponse.from_domain(r) for r in reviews]
+    return [_review_to_response(r) for r in reviews]
 
 
 @router.get("/{review_id}", summary="Get a single review by ID")
@@ -144,11 +127,12 @@ async def get_review(
     review = await repo.get(tenant_id, review_id)
     if review is None:
         raise NotFoundError(f"Review {review_id} not found")
-    return ReviewResponse.from_domain(review)
+    return _review_to_response(review)
 
 
-@router.post("/{review_id}/resolve", status_code=status.HTTP_200_OK,
-             summary="Submit a reviewer decision")
+@router.post(
+    "/{review_id}/resolve", status_code=status.HTTP_200_OK, summary="Submit a reviewer decision"
+)
 async def resolve_review(
     request: Request,
     repo: ReviewRepoDep,
@@ -168,7 +152,7 @@ async def resolve_review(
             f"Review {review_id} is already {review.status.value}; cannot resolve again.",
             code="review_already_resolved",
         )
-    if body.decision == ReviewDecision.REQUEST_REFINEMENT and not body.comment:
+    if body.decision.value == "request_refinement" and not body.comment:
         raise BusinessRuleError(
             "comment is required when decision=request_refinement.",
             code="comment_required",
@@ -192,22 +176,21 @@ async def resolve_review(
     )
 
     # Atomic: resolve review + insert outbox entry in a single Mongo transaction.
-    async with await mongo.client.start_session() as session:
-        async with session.start_transaction():
-            updated = await repo.resolve(
-                tenant_id,
-                review_id,
-                decision=body.decision,
-                comment=body.comment,
-                reviewer_id=principal_id,
+    async with await mongo.client.start_session() as session, session.start_transaction():
+        updated = await repo.resolve(
+            tenant_id,
+            review_id,
+            decision=DomainReviewDecision(body.decision.value),
+            comment=body.comment,
+            reviewer_id=principal_id,
+        )
+        if updated is None:
+            # Race: another request resolved it between our get and resolve.
+            raise BusinessRuleError(
+                f"Review {review_id} was concurrently resolved.",
+                code="review_already_resolved",
             )
-            if updated is None:
-                # Race: another request resolved it between our get and resolve.
-                raise BusinessRuleError(
-                    f"Review {review_id} was concurrently resolved.",
-                    code="review_already_resolved",
-                )
-            await outbox_repo.insert(outbox_entry)
+        await outbox_repo.insert(outbox_entry)
 
     logger.info(
         "review.resolved",
@@ -217,4 +200,4 @@ async def resolve_review(
         resolved_by=principal_id,
         tenant_id=tenant_id,
     )
-    return ReviewResponse.from_domain(updated)
+    return _review_to_response(updated)

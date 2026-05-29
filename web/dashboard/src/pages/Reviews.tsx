@@ -72,7 +72,7 @@ export default function Reviews() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <ReviewStatusBadge status={review.status} />
                     {review.status === "pending" && (
-                      <SlaCountdown deadline={review.sla_deadline} />
+                      <SlaCountdown deadline={review.timeout_at} />
                     )}
                     {review.flagging_reason && (
                       <Badge variant="outline" className="text-xs">{review.flagging_reason}</Badge>
@@ -83,7 +83,7 @@ export default function Reviews() {
                   </p>
                 </div>
                 <div className="text-right space-y-1">
-                  <p className="text-sm font-medium">{formatCurrency(review.cost_usd_so_far)}</p>
+                  <p className="text-sm font-medium">{formatCurrency((review.cost_usd_so_far_cents ?? 0) / 100)}</p>
                   <p className="text-xs text-muted-foreground">{formatRelative(review.created_at)}</p>
                 </div>
               </Link>

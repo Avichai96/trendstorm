@@ -20,6 +20,7 @@ We do NOT store:
   than computing it.
 - `latest_report_id` — likewise derived.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

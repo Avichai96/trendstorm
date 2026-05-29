@@ -3,6 +3,7 @@
 Domain interface only — infrastructure/mongo/repositories/review_repository.py
 is the concrete implementation.
 """
+
 from __future__ import annotations
 
 from typing import Protocol
@@ -15,9 +16,7 @@ class ReviewRepository(Protocol):
 
     async def get(self, tenant_id: str, review_id: str) -> ReviewRequest | None: ...
 
-    async def get_pending_for_job(
-        self, tenant_id: str, job_id: str
-    ) -> ReviewRequest | None: ...
+    async def get_pending_for_job(self, tenant_id: str, job_id: str) -> ReviewRequest | None: ...
 
     async def list_for_tenant(
         self,
@@ -38,8 +37,6 @@ class ReviewRepository(Protocol):
         reviewer_id: str | None,
     ) -> ReviewRequest | None: ...
 
-    async def mark_timed_out(
-        self, tenant_id: str, review_id: str
-    ) -> ReviewRequest | None: ...
+    async def mark_timed_out(self, tenant_id: str, review_id: str) -> ReviewRequest | None: ...
 
     async def list_expired_pending(self, *, limit: int = 100) -> list[ReviewRequest]: ...

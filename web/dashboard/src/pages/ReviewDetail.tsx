@@ -34,20 +34,34 @@ export default function ReviewDetail() {
         </Link>
         <h1 className="text-xl font-bold">Review</h1>
         <ReviewStatusBadge status={review.status} />
-        {isPending && <SlaCountdown deadline={review.sla_deadline} />}
+        {isPending && <SlaCountdown deadline={review.timeout_at} />}
       </div>
 
       {/* Metadata */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Cost so far", value: formatCurrency(review.cost_usd_so_far) },
-          { label: "Refinement loops", value: String(review.refinement_loops_used) },
-          { label: "Validator score", value: review.validator_score != null ? `${(review.validator_score * 100).toFixed(0)}%` : "—" },
-          { label: "SLA deadline", value: formatDate(review.sla_deadline) },
+          {
+            label: "Cost so far",
+            value: formatCurrency((review.cost_usd_so_far_cents ?? 0) / 100),
+          },
+          {
+            label: "Refinement loops",
+            value: String(review.refinement_loops_used ?? 0),
+          },
+          {
+            label: "Validator score",
+            value:
+              review.validator_score != null
+                ? `${(review.validator_score * 100).toFixed(0)}%`
+                : "—",
+          },
+          { label: "SLA deadline", value: formatDate(review.timeout_at) },
         ].map(({ label, value }) => (
           <Card key={label}>
             <CardHeader className="pb-1">
-              <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">{label}</CardTitle>
+              <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
+                {label}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-lg font-bold">{value}</p>
@@ -74,11 +88,15 @@ export default function ReviewDetail() {
             <CardTitle className="text-sm">Associated Job</CardTitle>
           </CardHeader>
           <CardContent className="text-sm space-y-1">
-            <p className="font-mono text-xs text-muted-foreground">{job.job_id}</p>
-            <p>Status: <Badge variant="secondary">{job.status}</Badge></p>
-            <p className="text-xs text-muted-foreground">Created {formatRelative(job.created_at)}</p>
+            <p className="font-mono text-xs text-muted-foreground">{job.id}</p>
+            <p>
+              Status: <Badge variant="secondary">{job.status}</Badge>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Created {formatRelative(job.created_at)}
+            </p>
             <Link
-              to={`/jobs/${job.job_id}`}
+              to={`/jobs/${job.id}`}
               className="text-xs text-primary hover:underline"
             >
               View pipeline →
@@ -88,18 +106,19 @@ export default function ReviewDetail() {
       )}
 
       {/* Reviewer note (if resolved) */}
-      {review.review_note && (
+      {review.decision_comment && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Review Note</CardTitle>
           </CardHeader>
           <CardContent>
             <blockquote className="border-l-2 border-muted pl-3 text-sm text-muted-foreground">
-              {review.review_note}
+              {review.decision_comment}
             </blockquote>
-            {review.reviewed_by && (
+            {review.reviewer_id && (
               <p className="mt-2 text-xs text-muted-foreground">
-                — {review.reviewed_by}, {review.reviewed_at ? formatRelative(review.reviewed_at) : ""}
+                — {review.reviewer_id},{" "}
+                {review.resolved_at ? formatRelative(review.resolved_at) : ""}
               </p>
             )}
           </CardContent>

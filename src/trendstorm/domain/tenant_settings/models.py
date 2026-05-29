@@ -11,6 +11,7 @@ HitlMode semantics:
                     exhausted max refinement loops, or that exceeded
                     hitl_cost_threshold_usd are routed to review.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

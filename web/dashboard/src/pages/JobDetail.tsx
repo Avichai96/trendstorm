@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSSE } from "@/hooks/useSSE";
 import { ArrowLeft, FileText, Wifi, WifiOff } from "lucide-react";
-import { formatDate, formatCurrency, formatRelative } from "@/lib/utils";
+import { formatDate, formatRelative } from "@/lib/utils";
 import type { StreamEvent } from "@/api/types.generated";
 
 export default function JobDetail() {
@@ -28,7 +28,7 @@ export default function JobDetail() {
   const onEvent = useCallback(
     (event: StreamEvent) => {
       setEvents((prev) => [...prev.slice(-99), event]);
-      if (event.event_type === "stage_changed") {
+      if (event.event_type === "stage_completed" || event.event_type === "stage_failed") {
         void qc.invalidateQueries({ queryKey: jobKeys.detail(id!) });
       }
     },
@@ -69,7 +69,7 @@ export default function JobDetail() {
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="font-mono text-lg font-bold">{job.job_id}</h1>
+          <h1 className="font-mono text-lg font-bold">{job.id}</h1>
           <p className="text-xs text-muted-foreground">{formatDate(job.created_at)}</p>
         </div>
         <JobStatusBadge status={job.status} />
@@ -96,25 +96,27 @@ export default function JobDetail() {
 
       <Card>
         <CardContent className="pt-6">
-          <PipelineProgress status={job.status} refinementLoops={job.refinement_loops_used} />
+          <PipelineProgress status={job.status} />
         </CardContent>
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Cost</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Docs ingested</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(job.cost_usd)}</p>
+            <p className="text-2xl font-bold">{job.metrics.documents_ingested}</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Refinements</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">LLM tokens</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{job.refinement_loops_used}</p>
+            <p className="text-2xl font-bold">
+              {(job.metrics.llm_input_tokens + job.metrics.llm_output_tokens).toLocaleString()}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -129,32 +131,22 @@ export default function JobDetail() {
 
       {job.status === "completed" && job.report_id && (
         <div className="flex items-center gap-3">
-          <Link to={`/jobs/${job.job_id}/report`}>
+          <Link to={`/jobs/${job.id}/report`}>
             <Button>
               <FileText className="mr-2 h-4 w-4" />
               View Report
             </Button>
           </Link>
-          {job.pdf_report_url && (
-            <a href={job.pdf_report_url} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline">Download PDF</Button>
-            </a>
-          )}
-          {job.json_report_url && (
-            <a href={job.json_report_url} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline">Download JSON</Button>
-            </a>
-          )}
         </div>
       )}
 
-      {job.error_message && (
+      {job.failure_message && (
         <Card className="border-destructive">
           <CardHeader>
             <CardTitle className="text-sm text-destructive">Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="text-xs text-muted-foreground whitespace-pre-wrap">{job.error_message}</pre>
+            <pre className="text-xs text-muted-foreground whitespace-pre-wrap">{job.failure_message}</pre>
           </CardContent>
         </Card>
       )}

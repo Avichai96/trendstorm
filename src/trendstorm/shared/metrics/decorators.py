@@ -26,6 +26,7 @@ Design notes:
     - The exception is ALWAYS re-raised; the decorator only observes.
     - Sync functions are not supported (all TrendStorm handlers are async).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -70,11 +71,10 @@ def with_metrics(
                            inherit from TrendStormError; pass specific subclasses.
 
     """
+
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
         if not asyncio.iscoroutinefunction(fn):
-            raise TypeError(
-                f"@with_metrics only supports async functions; got {fn!r}"
-            )
+            raise TypeError(f"@with_metrics only supports async functions; got {fn!r}")
 
         @functools.wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -103,4 +103,5 @@ def with_metrics(
                     counter_metric.labels(**cnt_labels).inc()
 
         return wrapper
+
     return decorator

@@ -15,6 +15,7 @@ Lifecycle:
     3. Insert one Report row per format with blob_uri
     4. API responds with Report blob URIs for download
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -34,10 +35,10 @@ class Report(BaseModel):
     tenant_id: str
     job_id: str
     category_id: str
-    analysis_id: str            # which analysis was rendered
+    analysis_id: str  # which analysis was rendered
 
     format: ReportFormat
-    blob_uri: str               # "s3://trendstorm-reports/{tenant}/{job}/{id}.pdf"
+    blob_uri: str  # "s3://trendstorm-reports/{tenant}/{job}/{id}.pdf"
     blob_size_bytes: int = 0
 
     # Human-friendly. The renderer chooses a title from the analysis summary.

@@ -16,6 +16,7 @@ User-curated memories have `source = "user_curated"` and carry `curated_by`
 (the API key or JWT sub of the creator). They are created via POST
 /v1/categories/{id}/memories with `tenant_admin` role.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -35,9 +36,9 @@ class MemoryKind(StrEnum):
 
 
 class MemorySource(StrEnum):
-    JOB_OUTCOME = "job_outcome"        # episodic — written by publisher post-job
-    EXTRACTED = "extracted"            # semantic — extracted by LLM from analysis
-    USER_CURATED = "user_curated"      # written via API by tenant admin
+    JOB_OUTCOME = "job_outcome"  # episodic — written by publisher post-job
+    EXTRACTED = "extracted"  # semantic — extracted by LLM from analysis
+    USER_CURATED = "user_curated"  # written via API by tenant admin
 
 
 class Memory(BaseModel):
@@ -57,7 +58,7 @@ class Memory(BaseModel):
     kind: MemoryKind
     source: MemorySource
 
-    content: str                    # the durable claim / episodic summary
+    content: str  # the durable claim / episodic summary
     confidence: float = Field(ge=0.0, le=1.0)
 
     # Provenance — tracing back to the job that produced this memory
@@ -65,13 +66,20 @@ class Memory(BaseModel):
     source_analysis_id: str
 
     # ChromaDB vector reference
-    content_embedding_id: str | None = None   # set after Chroma upsert
+    content_embedding_id: str | None = None  # set after Chroma upsert
 
     # Supersession — set when a newer claim contradicts this one
-    superseded_by: str | None = None          # Memory.id of the superseding record
-    is_active: bool = True                    # False when superseded or user-deleted
+    superseded_by: str | None = None  # Memory.id of the superseding record
+    is_active: bool = True  # False when superseded or user-deleted
 
     tags: list[str] = Field(default_factory=list)
+
+    # Provenance link to the HITL review that approved this memory (None if HITL off)
+    review_id: str | None = None
+    # Explicit expiry — overrides the TTL index when set (user-curated memories)
+    valid_until: datetime | None = None
+    # Bumped by MemoryRetriever each time this memory is included in analyst context
+    last_referenced_at: datetime | None = None
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -88,4 +96,4 @@ class UserCuratedMemory(Memory):
     model_config = ConfigDict(extra="forbid")
 
     source: Literal[MemorySource.USER_CURATED] = MemorySource.USER_CURATED
-    curated_by: str              # API key id or JWT subject of creator
+    curated_by: str  # API key id or JWT subject of creator

@@ -25,6 +25,7 @@ HTML escaping for report rendering:
     text inside HTML attributes or unstructured text nodes. Use it in
     templates instead of raw interpolation.
 """
+
 from __future__ import annotations
 
 import html
@@ -76,6 +77,7 @@ _STYLE_TAG = re.compile(
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def sanitize_text(text: str) -> str:
     """Strip known XSS/injection vectors from analyst output text.

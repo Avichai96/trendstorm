@@ -9,6 +9,7 @@ The entry carries a raw `payload` dict (pre-serialized event body) and the
 Kafka topic + key so the relay worker needs no domain knowledge of individual
 event types.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -28,8 +29,8 @@ class OutboxEntry(BaseModel):
 
     # Kafka routing
     topic: str
-    key: str                        # Kafka message key (usually job_id)
-    payload: dict[str, object]      # Pre-serialized event body (JSON-ready)
+    key: str  # Kafka message key (usually job_id)
+    payload: dict[str, object]  # Pre-serialized event body (JSON-ready)
 
     # Lifecycle
     retry_count: int = 0

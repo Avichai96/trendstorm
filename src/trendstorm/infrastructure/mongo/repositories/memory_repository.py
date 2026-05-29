@@ -1,7 +1,7 @@
 """MongoDB implementation of MemoryRepository (Phase 15.5)."""
+
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import ClassVar
 
 from pymongo import DESCENDING

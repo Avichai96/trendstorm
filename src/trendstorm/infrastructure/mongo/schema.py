@@ -8,6 +8,7 @@ end up with `jobs`, `Jobs`, `job` and zero queries finding all the data.
 Reading any of these symbols in code is a hint that someone is talking to
 Mongo at that line.
 """
+
 from __future__ import annotations
 
 from enum import StrEnum

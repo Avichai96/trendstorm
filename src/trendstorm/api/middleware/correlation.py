@@ -14,6 +14,7 @@ Why a header and not just the OTel trace_id?
     - Many ops tools (zendesk, support emails) want a short ID to grep for.
     - OTel traces are sampled (some dropped); correlation IDs are always present.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

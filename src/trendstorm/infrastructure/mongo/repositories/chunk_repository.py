@@ -14,6 +14,7 @@ Two methods deserve extra attention because they're on the hot path:
     scores align with the right text. Mongo's `$in` returns documents in
     no particular order, so we build a position map post-fetch.
 """
+
 from __future__ import annotations
 
 from typing import ClassVar

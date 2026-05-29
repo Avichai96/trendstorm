@@ -10,6 +10,7 @@ Why a wrapper?
     - Observability: we can wrap send() with metrics later without changing
       callers.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -54,7 +55,7 @@ class KafkaProducerClient:
             "compression_type": "lz4",  # matches kafka-init topic config
             # 5 in-flight requests is the max for idempotent producer
             "max_batch_size": 64 * 1024,
-            "linger_ms": 20,            # small wait to allow batching
+            "linger_ms": 20,  # small wait to allow batching
             "request_timeout_ms": 30000,
         }
 

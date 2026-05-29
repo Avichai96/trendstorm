@@ -16,6 +16,7 @@ Why manual offset commits?
     only after `handle()` returns successfully, ensuring at-least-once
     semantics (which our idempotency layer turns into effectively exactly-once).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -96,7 +97,7 @@ class BaseConsumer:
             "bootstrap_servers": self._settings.bootstrap_servers,
             "group_id": self._group_id,
             "client_id": f"{self._settings.client_id}-{self._worker_name}",
-            "enable_auto_commit": False,            # we commit manually
+            "enable_auto_commit": False,  # we commit manually
             "auto_offset_reset": "earliest",
             # Limit in-flight: 1 message per partition at a time, processed
             # sequentially. Within a partition, ordering matters (per-job
@@ -113,9 +114,7 @@ class BaseConsumer:
                 kwargs["sasl_mechanism"] = self._settings.sasl_mechanism
             if self._settings.sasl_username and self._settings.sasl_password:
                 kwargs["sasl_plain_username"] = self._settings.sasl_username
-                kwargs["sasl_plain_password"] = (
-                    self._settings.sasl_password.get_secret_value()
-                )
+                kwargs["sasl_plain_password"] = self._settings.sasl_password.get_secret_value()
 
         self._consumer = AIOKafkaConsumer(*[t.value for t in self._topics], **kwargs)
         await self._consumer.start()
@@ -260,9 +259,7 @@ class BaseConsumer:
             except Exception as e:
                 # Unknown failure — log with traceback and DLQ.
                 logger.exception("handler_unexpected_error", event_type=event.event_type)
-                await self._send_to_dlq(
-                    record.value, reason="handler_exception", detail=str(e)
-                )
+                await self._send_to_dlq(record.value, reason="handler_exception", detail=str(e))
 
     async def _dispatch_with_idempotency(self, event: EventEnvelope) -> None:
         """Acquire idempotency, call handler, mark complete."""
@@ -301,9 +298,7 @@ class BaseConsumer:
             with contextlib.suppress(Exception):
                 self._record_handle_metrics(event, status, elapsed)
 
-    def _record_handle_metrics(
-        self, event: EventEnvelope, status: str, elapsed: float
-    ) -> None:
+    def _record_handle_metrics(self, event: EventEnvelope, status: str, elapsed: float) -> None:
         """Override to record per-event worker metrics. Default: no-op.
 
         Called after every handle() invocation with the outcome status
@@ -344,9 +339,7 @@ class BaseConsumer:
         """
         return f"{self._worker_name}:{event.event_id}"
 
-    async def _handle_failure(
-        self, event: EventEnvelope, error: TrendStormError
-    ) -> None:
+    async def _handle_failure(self, event: EventEnvelope, error: TrendStormError) -> None:
         """Route domain errors to retry topic or DLQ.
 
         Default behavior: send to DLQ. Subclasses override to route

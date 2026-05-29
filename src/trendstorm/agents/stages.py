@@ -24,6 +24,7 @@ Transition rules
 
 These are enforced in `is_valid_transition` so bugs in node code surface fast.
 """
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -37,13 +38,15 @@ class Stage(StrEnum):
     EMBEDDING = "embedding"
     RETRIEVING = "retrieving"
     ANALYZING = "analyzing"
-    AWAITING_REVIEW = "awaiting_review"   # HITL: paused for human decision
+    AWAITING_REVIEW = "awaiting_review"  # HITL: paused for human decision
     PUBLISHING = "publishing"
-    MEMORY_CONSOLIDATION = "memory_consolidation"   # Phase 15.5: persist episodic + semantic memories
+    MEMORY_CONSOLIDATION = (
+        "memory_consolidation"  # Phase 15.5: persist episodic + semantic memories
+    )
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
-    REJECTED = "rejected"                 # HITL: human reviewer rejected the analysis
+    REJECTED = "rejected"  # HITL: human reviewer rejected the analysis
 
     @property
     def is_terminal(self) -> bool:
@@ -53,28 +56,46 @@ class Stage(StrEnum):
 # Allowed forward transitions. Map of stage -> set of next stages.
 # Cancellation can happen from any non-terminal stage; handled separately.
 _TRANSITIONS: dict[Stage, frozenset[Stage]] = {
-    Stage.PENDING:    frozenset({Stage.INGESTING, Stage.FAILED, Stage.CANCELLED}),
-    Stage.INGESTING:  frozenset({Stage.INGESTING, Stage.EMBEDDING, Stage.FAILED, Stage.CANCELLED}),
-    Stage.EMBEDDING:  frozenset({Stage.EMBEDDING, Stage.RETRIEVING, Stage.FAILED, Stage.CANCELLED}),
+    Stage.PENDING: frozenset({Stage.INGESTING, Stage.FAILED, Stage.CANCELLED}),
+    Stage.INGESTING: frozenset({Stage.INGESTING, Stage.EMBEDDING, Stage.FAILED, Stage.CANCELLED}),
+    Stage.EMBEDDING: frozenset({Stage.EMBEDDING, Stage.RETRIEVING, Stage.FAILED, Stage.CANCELLED}),
     Stage.RETRIEVING: frozenset({Stage.RETRIEVING, Stage.ANALYZING, Stage.FAILED, Stage.CANCELLED}),
     # ANALYZING can loop back to RETRIEVING for auto-refinement, or pause for HITL review.
-    Stage.ANALYZING:  frozenset({
-        Stage.ANALYZING, Stage.AWAITING_REVIEW, Stage.PUBLISHING, Stage.RETRIEVING,
-        Stage.FAILED, Stage.CANCELLED,
-    }),
+    Stage.ANALYZING: frozenset(
+        {
+            Stage.ANALYZING,
+            Stage.AWAITING_REVIEW,
+            Stage.PUBLISHING,
+            Stage.RETRIEVING,
+            Stage.FAILED,
+            Stage.CANCELLED,
+        }
+    ),
     # AWAITING_REVIEW can transition to: ANALYZING (refinement), PUBLISHING (approved),
     # REJECTED (reviewer rejected or timeout).
-    Stage.AWAITING_REVIEW: frozenset({
-        Stage.ANALYZING, Stage.PUBLISHING, Stage.REJECTED, Stage.CANCELLED,
-    }),
-    Stage.PUBLISHING: frozenset({Stage.PUBLISHING, Stage.MEMORY_CONSOLIDATION, Stage.FAILED, Stage.CANCELLED}),
-    Stage.MEMORY_CONSOLIDATION: frozenset({
-        Stage.MEMORY_CONSOLIDATION, Stage.COMPLETED, Stage.FAILED, Stage.CANCELLED,
-    }),
-    Stage.COMPLETED:  frozenset(),
-    Stage.FAILED:     frozenset(),
-    Stage.CANCELLED:  frozenset(),
-    Stage.REJECTED:   frozenset(),
+    Stage.AWAITING_REVIEW: frozenset(
+        {
+            Stage.ANALYZING,
+            Stage.PUBLISHING,
+            Stage.REJECTED,
+            Stage.CANCELLED,
+        }
+    ),
+    Stage.PUBLISHING: frozenset(
+        {Stage.PUBLISHING, Stage.MEMORY_CONSOLIDATION, Stage.FAILED, Stage.CANCELLED}
+    ),
+    Stage.MEMORY_CONSOLIDATION: frozenset(
+        {
+            Stage.MEMORY_CONSOLIDATION,
+            Stage.COMPLETED,
+            Stage.FAILED,
+            Stage.CANCELLED,
+        }
+    ),
+    Stage.COMPLETED: frozenset(),
+    Stage.FAILED: frozenset(),
+    Stage.CANCELLED: frozenset(),
+    Stage.REJECTED: frozenset(),
 }
 
 

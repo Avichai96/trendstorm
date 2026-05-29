@@ -24,6 +24,7 @@ Design decisions:
     - `validate_redirect(from_url, to_url)` exposes the per-hop check so
       the Scout fetcher can validate each redirect step individually.
 """
+
 from __future__ import annotations
 
 import ipaddress
@@ -42,14 +43,16 @@ MAX_REDIRECTS = 3
 _ALLOWED_SCHEMES: frozenset[str] = frozenset({"http", "https"})
 
 # Internal DNS suffixes — never reachable from public internet
-_INTERNAL_SUFFIXES: frozenset[str] = frozenset({
-    ".internal",
-    ".local",
-    ".cluster.local",
-    ".svc",
-    ".svc.cluster.local",
-    "localhost",
-})
+_INTERNAL_SUFFIXES: frozenset[str] = frozenset(
+    {
+        ".internal",
+        ".local",
+        ".cluster.local",
+        ".svc",
+        ".svc.cluster.local",
+        "localhost",
+    }
+)
 
 # All private / non-routable IPv4 and IPv6 networks
 _BLOCKED_NETWORKS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
@@ -86,18 +89,20 @@ _BLOCKED_NETWORKS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
 # Result type
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True, slots=True)
 class ValidatedURL:
     """A URL that has passed SSRF validation."""
 
-    url: str      # original URL string
-    host: str     # extracted hostname
-    scheme: str   # normalized scheme
+    url: str  # original URL string
+    host: str  # extracted hostname
+    scheme: str  # normalized scheme
 
 
 # ---------------------------------------------------------------------------
 # Pure inner helpers (exported for unit tests)
 # ---------------------------------------------------------------------------
+
 
 def _check_scheme(scheme: str, url: str) -> None:
     """Reject non-HTTP(S) schemes — blocks file://, ftp://, gopher://, etc."""
@@ -113,7 +118,7 @@ def _check_scheme_downgrade(from_scheme: str, to_scheme: str, url: str) -> None:
     """Reject https → http redirect: strips TLS, may expose internal services."""
     if from_scheme == "https" and to_scheme == "http":
         raise SSRFBlockedError(
-            f"Redirect from HTTPS to HTTP is blocked",
+            "Redirect from HTTPS to HTTP is blocked",
             reason="ssrf_scheme_downgrade",
             url=url,
         )
@@ -183,8 +188,9 @@ def _reason_for_network(net: ipaddress.IPv4Network | ipaddress.IPv6Network) -> s
 # DNS resolution (blocking — call from executor in async context)
 # ---------------------------------------------------------------------------
 
+
 def resolve_hostname(hostname: str) -> list[str]:
-    """Synchronous DNS resolution. Returns all resolved IP addresses.
+    """Resolve hostname to IP addresses via synchronous DNS lookup.
 
     Callers in async contexts must wrap in `loop.run_in_executor(None, ...)`.
     Returns an empty list if hostname is already a bare IP (no lookup needed).
@@ -198,7 +204,7 @@ def resolve_hostname(hostname: str) -> list[str]:
 
     try:
         infos = socket.getaddrinfo(hostname, None)
-        return [info[4][0] for info in infos]
+        return [str(info[4][0]) for info in infos]
     except socket.gaierror:
         # DNS resolution failed — block the URL (fail-closed)
         return []
@@ -207,6 +213,7 @@ def resolve_hostname(hostname: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def validate_url(
     url: str,
@@ -230,6 +237,7 @@ def validate_url(
     Note: This function does NOT follow redirects. Use validate_redirect()
     for each redirect hop. DNS resolution is synchronous (blocking); call
     from asyncio.get_event_loop().run_in_executor(None, ...) in async code.
+
     """
     parsed = urlsplit(url)
 
@@ -248,10 +256,7 @@ def validate_url(
     _check_hostname_suffix(hostname, url)
 
     # DNS resolution — use injected addrs in tests, real lookup in production
-    if resolved_addrs is None:
-        addrs = resolve_hostname(hostname)
-    else:
-        addrs = resolved_addrs
+    addrs = resolve_hostname(hostname) if resolved_addrs is None else resolved_addrs
 
     if not addrs:
         raise SSRFBlockedError(
@@ -287,6 +292,7 @@ def validate_redirect(
 
     Raises:
         SSRFBlockedError: On any SSRF violation.
+
     """
     from_scheme = (urlsplit(from_url).scheme or "").lower()
     to_parsed = urlsplit(to_url)

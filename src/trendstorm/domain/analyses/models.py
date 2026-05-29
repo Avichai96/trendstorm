@@ -30,6 +30,7 @@ Schema design:
     `validator_score` and `validator_notes` come from the validation
     pass (whether the analyst's own work passes the rubric).
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -62,7 +63,7 @@ class Citation(BaseModel):
     document_id: str
     source_id: str
     excerpt: str = Field(..., max_length=500)
-    url: str | None = None        # convenience: original URL of the source
+    url: str | None = None  # convenience: original URL of the source
 
 
 class Analysis(BaseModel):
@@ -91,7 +92,7 @@ class Analysis(BaseModel):
 
     # Model provenance — critical for evaluation and debugging.
     model_name: str | None = None
-    model_provider: str | None = None       # "anthropic" | "openai" | "ollama"
+    model_provider: str | None = None  # "anthropic" | "openai" | "ollama"
     input_tokens: int = 0
     output_tokens: int = 0
 

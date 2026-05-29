@@ -17,9 +17,32 @@ Non-API errors (network timeout, bad config, SSE stream issues):
     ├── StreamError         SSE stream parse or connection error
     └── HeartbeatTimeout    no event received within heartbeat window
 """
+
 from __future__ import annotations
 
+import email.utils
+import time
 from typing import Any
+
+
+def _parse_retry_after_header(headers: dict[str, str]) -> float | None:
+    """Parse Retry-After header value to seconds from now.
+
+    Accepts both integer seconds ("30") and HTTP-date formats.
+    Returns None if the header is absent or unparseable.
+    """
+    value = headers.get("retry-after") or headers.get("Retry-After")
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    try:
+        parsed = email.utils.parsedate_to_datetime(value)
+        return max(0.0, parsed.timestamp() - time.time())
+    except Exception:
+        return None
 
 
 class TrendStormError(Exception):
@@ -73,17 +96,22 @@ class APIError(TrendStormError):
         self.raw = raw or {}
 
     @classmethod
-    def from_response(cls, status_code: int, body: dict[str, Any], headers: dict[str, str]) -> "APIError":
+    def from_response(
+        cls, status_code: int, body: dict[str, Any], headers: dict[str, str]
+    ) -> "APIError":
         err = body.get("error", {})
         klass = _STATUS_TO_CLASS.get(status_code, APIError)
-        return klass(
-            status_code=status_code,
-            error_code=err.get("code", "unknown"),
-            message=err.get("message", str(body)),
-            request_id=headers.get("x-request-id"),
-            correlation_id=body.get("correlation_id"),
-            raw=body,
-        )
+        base_kwargs: dict[str, Any] = {
+            "status_code": status_code,
+            "error_code": err.get("code", "unknown"),
+            "message": err.get("message", str(body)),
+            "request_id": headers.get("x-request-id"),
+            "correlation_id": body.get("correlation_id"),
+            "raw": body,
+        }
+        if klass is RateLimited:
+            return RateLimited(retry_after=_parse_retry_after_header(headers), **base_kwargs)
+        return klass(**base_kwargs)
 
 
 class RateLimited(APIError):

@@ -19,6 +19,7 @@ Design notes:
       the chunk is dropped with a warning rather than surfacing an empty-text
       result to the LLM.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -95,9 +96,7 @@ class ChromaVectorRetriever:
     async def _run_query(self, request: RetrievalRequest) -> list[RetrievedChunk]:
         # Embed with task_type="query" — asymmetric models use different weights.
         try:
-            embed_result = await self._embed.embed_batch(
-                [request.query], task_type="query"
-            )
+            embed_result = await self._embed.embed_batch([request.query], task_type="query")
         except Exception as exc:
             raise DatabaseError(
                 "Vector retrieval failed during query embedding",
@@ -143,10 +142,10 @@ class ChromaVectorRetriever:
                     chunk_id=hit.id,
                     score=hit.score,
                     text=hit.document,
-                    parent_text=None,           # filled by HybridRetriever
+                    parent_text=None,  # filled by HybridRetriever
                     document_id=hit.metadata.get("document_id", ""),
                     source_id=hit.metadata.get("source_id", ""),
-                    source_url=None,            # filled by Analyst
+                    source_url=None,  # filled by Analyst
                 )
             )
 

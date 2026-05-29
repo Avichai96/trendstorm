@@ -17,6 +17,7 @@ Edge cases:
     - Citation chunk_id not found in Mongo: that citation scores 0.0.
     - Embedding call fails: the entire evaluator raises (caller decides retry).
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -98,9 +99,7 @@ class CitationLookupEvaluator:
             for citation in analysis.citations:
                 chunk = await self._lookup_chunk(citation.chunk_id, example=example)
                 if chunk is None:
-                    logger.debug(
-                        "eval.citation.chunk_not_found", chunk_id=citation.chunk_id
-                    )
+                    logger.debug("eval.citation.chunk_not_found", chunk_id=citation.chunk_id)
                     continue
 
                 sim = await self._similarity(citation.excerpt, chunk.text)
@@ -147,9 +146,7 @@ class CitationLookupEvaluator:
         return None
 
     async def _similarity(self, excerpt: str, chunk_text: str) -> float:
-        result = await self._embed.embed_batch(
-            [excerpt, chunk_text], task_type="query"
-        )
+        result = await self._embed.embed_batch([excerpt, chunk_text], task_type="query")
         if len(result.vectors) < 2:
             return 0.0
         return max(-1.0, min(1.0, _cosine_similarity(result.vectors[0], result.vectors[1])))

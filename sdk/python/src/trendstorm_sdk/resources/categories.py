@@ -1,4 +1,5 @@
 """Categories resource — CRUD operations on trend categories."""
+
 from __future__ import annotations
 
 from trendstorm_shared.models import (

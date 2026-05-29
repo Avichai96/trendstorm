@@ -10,6 +10,7 @@ decides whether to run this step based on tenant settings. When hitl_mode
 is "always", the worker defers this step until after review; when "off",
 it runs immediately post-publish.
 """
+
 from __future__ import annotations
 
 import importlib.resources
@@ -17,7 +18,6 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from opentelemetry import trace
-from pydantic import BaseModel, ConfigDict, Field
 
 from trendstorm.domain.memories.models import Memory, MemoryKind, MemorySource
 from trendstorm.infrastructure.vectors.chroma_memory_store import (
@@ -25,7 +25,6 @@ from trendstorm.infrastructure.vectors.chroma_memory_store import (
     memory_collection_name,
 )
 from trendstorm.shared.errors import LLMSchemaError
-from trendstorm.shared.ids import new_id
 from trendstorm.shared.logging import get_logger
 from trendstorm.shared.metrics.registry import METRICS, StatusLabel
 from trendstorm.shared.tracing.semantics import Attr
@@ -155,7 +154,7 @@ class SemanticMemoryExtractor:
 
                     # Embed.
                     embeddings = await self._embed.embed_batch([claim])
-                    embedding = embeddings[0]
+                    embedding = embeddings.vectors[0]
                     collection = memory_collection_name(tenant_id, self._embed.model_id)
 
                     # Supersede detection — check similarity to existing active semantics.
@@ -235,10 +234,7 @@ class SemanticMemoryExtractor:
     ) -> list[dict[str, Any]]:
         from trendstorm.domain.llm.models import Message  # deferred
 
-        user_content = (
-            "## Analysis to distil\n\n"
-            f"**Summary:** {analysis.summary}\n\n"
-        )
+        user_content = f"## Analysis to distil\n\n**Summary:** {analysis.summary}\n\n"
         if analysis.insights:
             user_content += "**Key insights:**\n"
             for ins in analysis.insights[:10]:

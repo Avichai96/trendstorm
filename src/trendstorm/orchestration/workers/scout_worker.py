@@ -21,6 +21,7 @@ and do NOT trigger retries.
 Run:
     python -m trendstorm.orchestration.workers.scout_worker
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -130,8 +131,9 @@ class ScoutWorker(BaseConsumer):
     async def handle(self, event: EventEnvelope) -> None:
         """Process one IngestPendingEvent."""
         if not isinstance(event, IngestPendingEvent):
-            logger.warning("scout_unexpected_event_type",
-                           event_type=getattr(event, "event_type", "unknown"))
+            logger.warning(
+                "scout_unexpected_event_type", event_type=getattr(event, "event_type", "unknown")
+            )
             return
 
         with tracer.start_as_current_span(
@@ -159,9 +161,7 @@ class ScoutWorker(BaseConsumer):
         )
 
         # 1. Look up all source objects (URL, type, category_id, etc.)
-        sources = await self._source_repo.list_by_ids(
-            event.tenant_id, event.source_ids
-        )
+        sources = await self._source_repo.list_by_ids(event.tenant_id, event.source_ids)
         logger.info(
             "scout_sources_loaded",
             job_id=event.job_id,
@@ -242,9 +242,7 @@ class ScoutWorker(BaseConsumer):
     # Retry routing                                                        #
     # ------------------------------------------------------------------ #
 
-    async def _handle_failure(
-        self, event: EventEnvelope, error: TrendStormError
-    ) -> None:
+    async def _handle_failure(self, event: EventEnvelope, error: TrendStormError) -> None:
         """Route to staged retry topics before falling through to the DLQ."""
         if not isinstance(event, IngestPendingEvent):
             await super()._handle_failure(event, error)
@@ -255,9 +253,7 @@ class ScoutWorker(BaseConsumer):
         retry_index = attempt - 1
         if retry_index < len(_RETRY_TOPICS):
             retry_topic = _RETRY_TOPICS[retry_index]
-            retry_event = event.model_copy(
-                update={"attempt": attempt + 1, "event_id": new_id()}
-            )
+            retry_event = event.model_copy(update={"attempt": attempt + 1, "event_id": new_id()})
             try:
                 await self._producer.producer.send_and_wait(
                     retry_topic.value,
@@ -292,6 +288,7 @@ class ScoutWorker(BaseConsumer):
 # ===========================================================================
 # Process entry point
 # ===========================================================================
+
 
 async def run_worker() -> None:
     """Start the scout worker process, blocking until shutdown signal."""

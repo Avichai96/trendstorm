@@ -15,6 +15,7 @@ Cost units:
   to avoid floating-point rounding. Presentation layer divides by 1_000_000.
   Token prices follow the constants in `services/billing/prices.py`.
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -67,7 +68,7 @@ class TenantQuotas(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    monthly_spend_usd_micro: int = 10_000_000   # $10 default (free tier)
+    monthly_spend_usd_micro: int = 10_000_000  # $10 default (free tier)
     max_jobs_per_month: int = 50
     max_tokens_per_job: int = 500_000
 
@@ -82,27 +83,27 @@ class QuotaStatus(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     allowed: bool
-    monthly_spend_usd_micro: int          # accumulated this month
-    quota_spend_usd_micro: int            # tenant's monthly limit
+    monthly_spend_usd_micro: int  # accumulated this month
+    quota_spend_usd_micro: int  # tenant's monthly limit
     jobs_this_month: int
     quota_jobs: int
-    reason: str | None = None             # human-readable when denied
+    reason: str | None = None  # human-readable when denied
 
 
 # Plan → default quotas mapping (read by QuotaService, not stored in Mongo)
 PLAN_QUOTAS: dict[str, TenantQuotas] = {
     "free": TenantQuotas(
-        monthly_spend_usd_micro=10_000_000,    # $10
+        monthly_spend_usd_micro=10_000_000,  # $10
         max_jobs_per_month=50,
         max_tokens_per_job=500_000,
     ),
     "pro": TenantQuotas(
-        monthly_spend_usd_micro=100_000_000,   # $100
+        monthly_spend_usd_micro=100_000_000,  # $100
         max_jobs_per_month=500,
         max_tokens_per_job=2_000_000,
     ),
     "enterprise": TenantQuotas(
-        monthly_spend_usd_micro=1_000_000_000, # $1000
+        monthly_spend_usd_micro=1_000_000_000,  # $1000
         max_jobs_per_month=10_000,
         max_tokens_per_job=10_000_000,
     ),

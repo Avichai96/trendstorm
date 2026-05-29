@@ -2,6 +2,7 @@
 
 Requires API key with the ``reviewer`` role.
 """
+
 from __future__ import annotations
 
 from trendstorm_shared.models import ReviewResponse

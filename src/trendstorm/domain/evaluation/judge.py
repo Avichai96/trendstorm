@@ -16,6 +16,7 @@ Design:
     Cheap, diverse-provider models are preferred over one large model:
     diversity eliminates same-model bias and costs less per panel call.
 """
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -59,9 +60,9 @@ class JudgeVote(BaseModel):
 class PanelAggregation(StrEnum):
     """Strategy for combining votes from multiple judges."""
 
-    MEAN     = "mean"      # arithmetic mean of all valid scores
-    MEDIAN   = "median"    # median (more robust to outliers)
-    MIN      = "min"       # conservative — worst judge wins
+    MEAN = "mean"  # arithmetic mean of all valid scores
+    MEDIAN = "median"  # median (more robust to outliers)
+    MIN = "min"  # conservative — worst judge wins
     MAJORITY = "majority"  # passed = majority of judges passed
 
 
@@ -78,8 +79,8 @@ class PanelResult(BaseModel):
     score: float = Field(..., ge=0.0, le=1.0)
     passed: bool
     aggregation: PanelAggregation
-    n_judges: int                   # total judges attempted
-    n_valid: int                    # judges that returned a valid vote
+    n_judges: int  # total judges attempted
+    n_valid: int  # judges that returned a valid vote
 
 
 @runtime_checkable

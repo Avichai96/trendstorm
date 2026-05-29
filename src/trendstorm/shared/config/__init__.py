@@ -21,6 +21,7 @@ Why immutable, cached settings?
     - Twelve-factor compliance: config from env, loaded once, never reloaded.
       To change config, restart the process. This is intentional.
 """
+
 from __future__ import annotations
 
 import json
@@ -58,6 +59,7 @@ class _CsvFriendlyEnvSource(EnvSettingsSource):
 # Enums for closed-set string fields
 # ---------------------------------------------------------------------------
 
+
 class Environment(StrEnum):
     """Deployment environment. Drives sampling, logging, error verbosity."""
 
@@ -75,8 +77,8 @@ class LogLevel(StrEnum):
 
 
 class LogFormat(StrEnum):
-    JSON = "json"          # production: machine-parseable
-    CONSOLE = "console"    # development: human-friendly with color
+    JSON = "json"  # production: machine-parseable
+    CONSOLE = "console"  # development: human-friendly with color
 
 
 class LLMProvider(StrEnum):
@@ -89,6 +91,7 @@ class LLMProvider(StrEnum):
 # ---------------------------------------------------------------------------
 # Nested settings models — one per subsystem
 # ---------------------------------------------------------------------------
+
 
 class AppSettings(BaseSettings):
     """Top-level app metadata."""
@@ -349,10 +352,10 @@ class AuthMode(StrEnum):
     key_or_oauth — either API key or JWT works (production default).
     """
 
-    DISABLED    = "disabled"
-    HEADER      = "header"       # legacy; logs deprecation warning
-    KEY         = "key"
-    OAUTH       = "oauth"
+    DISABLED = "disabled"
+    HEADER = "header"  # legacy; logs deprecation warning
+    KEY = "key"
+    OAUTH = "oauth"
     KEY_OR_OAUTH = "key_or_oauth"
 
 
@@ -427,6 +430,7 @@ class MemorySettings(BaseSettings):
 # Root settings — composes all subsystems
 # ---------------------------------------------------------------------------
 
+
 class Settings(BaseSettings):
     """Root settings object.
 
@@ -437,11 +441,11 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=(".env", ".env.local"),   # .env.local overrides .env; gitignored
+        env_file=(".env", ".env.local"),  # .env.local overrides .env; gitignored
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
         case_sensitive=False,
-        extra="ignore",        # silently ignore unknown env vars (e.g. PATH)
+        extra="ignore",  # silently ignore unknown env vars (e.g. PATH)
         # Pydantic v2: validate on init; immutable afterwards
         frozen=True,
     )
@@ -485,6 +489,7 @@ class Settings(BaseSettings):
 # ---------------------------------------------------------------------------
 # Public accessor — lru_cache makes this a process-wide singleton
 # ---------------------------------------------------------------------------
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

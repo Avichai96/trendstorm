@@ -4,17 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import { format, parseISO } from "date-fns";
+import { formatCurrency } from "@/lib/utils";
 
 export default function Usage() {
   const { data: quota, isLoading } = useQuery(quotaCurrentMonthOptions());
@@ -30,129 +20,72 @@ export default function Usage() {
 
   if (!quota) return <p className="text-muted-foreground">No quota data available.</p>;
 
-  const pctHard = Math.min(100, (quota.current_usd / quota.hard_cap_usd) * 100);
-
-  const chartData = quota.daily_breakdown.map((d) => ({
-    date: format(parseISO(d.date), "MMM d"),
-    usd: d.usd,
-  }));
+  const spendPct = Math.min(100, (quota.monthly_spend_usd / quota.monthly_limit_usd) * 100);
+  const jobsPct = Math.min(100, (quota.jobs_this_month / quota.jobs_limit) * 100);
+  const hardCapReached = !quota.allowed && quota.reason === "spend_limit";
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Usage</h1>
-        <p className="text-sm text-muted-foreground">
-          {formatDate(quota.period_start)} → {formatDate(quota.period_end)}
-        </p>
+        <p className="text-sm text-muted-foreground">Current billing period</p>
       </div>
 
-      {quota.hard_cap_reached && (
+      {hardCapReached && (
         <div className="rounded-lg border border-destructive bg-destructive/10 p-4 text-sm text-destructive">
-          Hard cap reached — new jobs are disabled until the period resets.
+          Spend limit reached — new jobs are disabled until the period resets.
         </div>
       )}
-      {quota.soft_cap_reached && !quota.hard_cap_reached && (
+      {!quota.allowed && !hardCapReached && quota.reason && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-          Warning: current spend exceeds 80% of soft cap. Monitor closely.
+          Job creation paused: {quota.reason.replace(/_/g, " ")}
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Current Spend</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
+              Monthly Spend
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(quota.current_usd)}</p>
-            <Progress value={pctHard} className="mt-2 h-2" />
+            <p className="text-2xl font-bold">{formatCurrency(quota.monthly_spend_usd)}</p>
+            <Progress value={spendPct} className="mt-2 h-2" />
             <p className="mt-1 text-xs text-muted-foreground">
-              {pctHard.toFixed(1)}% of {formatCurrency(quota.hard_cap_usd)} hard cap
+              {spendPct.toFixed(1)}% of {formatCurrency(quota.monthly_limit_usd)} limit
             </p>
           </CardContent>
         </Card>
+
         <Card>
           <CardHeader className="pb-1">
-            <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Soft Cap</CardTitle>
+            <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">
+              Jobs This Month
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(quota.soft_cap_usd)}</p>
-            <div className="mt-1">
-              {quota.soft_cap_reached ? (
-                <Badge variant="warning">Exceeded</Badge>
-              ) : (
-                <Badge variant="success">OK</Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-1">
-            <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Hard Cap</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">{formatCurrency(quota.hard_cap_usd)}</p>
-            <div className="mt-1">
-              {quota.hard_cap_reached ? (
-                <Badge variant="destructive">Reached</Badge>
-              ) : (
-                <Badge variant="success">OK</Badge>
-              )}
-            </div>
+            <p className="text-2xl font-bold">{quota.jobs_this_month}</p>
+            <Progress value={jobsPct} className="mt-2 h-2" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {jobsPct.toFixed(1)}% of {quota.jobs_limit} job limit
+            </p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">Daily Spend</CardTitle>
+        <CardHeader className="pb-1">
+          <CardTitle className="text-xs uppercase tracking-wide text-muted-foreground">Status</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={(v) => `$${(v as number).toFixed(3)}`} tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v) => [formatCurrency(v as number), "Spend"]} />
-              <Line
-                type="monotone"
-                dataKey="usd"
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {quota.allowed ? (
+            <Badge variant="success">Allowed — jobs can be created</Badge>
+          ) : (
+            <Badge variant="destructive">Blocked — {quota.reason ?? "limit reached"}</Badge>
+          )}
         </CardContent>
       </Card>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">By Stage</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {Object.entries(quota.by_stage).sort(([, a], [, b]) => b - a).map(([stage, usd]) => (
-              <div key={stage} className="flex justify-between text-sm">
-                <span className="capitalize text-muted-foreground">{stage.replace(/_/g, " ")}</span>
-                <span className="font-mono font-medium">{formatCurrency(usd)}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">By Provider</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {Object.entries(quota.by_provider).sort(([, a], [, b]) => b - a).map(([provider, usd]) => (
-              <div key={provider} className="flex justify-between text-sm">
-                <span className="capitalize text-muted-foreground">{provider}</span>
-                <span className="font-mono font-medium">{formatCurrency(usd)}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }

@@ -23,6 +23,7 @@ Retry topology:
     Stream events arriving stale (e.g. 30s after job completion) are useless;
     retry delay would only make things worse.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -80,7 +81,10 @@ class SSECoordinatorWorker(BaseConsumer):
 
     async def handle(self, event: EventEnvelope) -> None:
         if not isinstance(event, StreamPartialEvent):
-            logger.warning("sse_coordinator_unexpected_event", event_type=getattr(event, "event_type", "unknown"))
+            logger.warning(
+                "sse_coordinator_unexpected_event",
+                event_type=getattr(event, "event_type", "unknown"),
+            )
             return
 
         with tracer.start_as_current_span(
@@ -89,9 +93,7 @@ class SSECoordinatorWorker(BaseConsumer):
         ):
             await self._process(event)
 
-    def _record_handle_metrics(
-        self, event: EventEnvelope, status: str, elapsed: float
-    ) -> None:
+    def _record_handle_metrics(self, event: EventEnvelope, status: str, elapsed: float) -> None:
         event_type = getattr(event, "stream_event_type", getattr(event, "event_type", "unknown"))
         METRICS.sse_events.labels(
             tenant_id=event.tenant_id,
@@ -145,6 +147,7 @@ class SSECoordinatorWorker(BaseConsumer):
 # ===========================================================================
 # Process entry point
 # ===========================================================================
+
 
 async def run_worker() -> None:
     """Start the SSE coordinator worker, blocking until shutdown signal."""

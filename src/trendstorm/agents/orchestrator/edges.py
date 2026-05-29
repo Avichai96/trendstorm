@@ -11,6 +11,7 @@ Separating routing from work has big benefits:
 
 Convention: each function is named `after_<stage>` for symmetry with nodes.
 """
+
 from __future__ import annotations
 
 from trendstorm.agents.stages import Stage
@@ -29,23 +30,24 @@ NODE_EMBED = "embed"
 NODE_RETRIEVE = "retrieve"
 NODE_ANALYZE = "analyze"
 NODE_REFINE = "refine"
-NODE_REVIEW_GATE = "review_gate"   # HITL: pause or pass-through before publish
+NODE_REVIEW_GATE = "review_gate"  # HITL: pause or pass-through before publish
 NODE_PUBLISH = "publish"
-NODE_MEMORY_CONSOLIDATION = "memory_consolidation"   # Phase 15.5: episodic + semantic write
+NODE_MEMORY_CONSOLIDATION = "memory_consolidation"  # Phase 15.5: episodic + semantic write
 NODE_FAIL = "fail"
-NODE_END = "__end__"   # LangGraph's reserved terminal node
+NODE_END = "__end__"  # LangGraph's reserved terminal node
 
 
 # ===========================================================================
 # After-stage routing functions
 # ===========================================================================
 
+
 def after_ingest(state: JobState) -> str:
     """Check if ingestion succeeded and whether we have budget to retry."""
     if state.ingestion.raw_documents:
         return NODE_EMBED
     if state.has_budget(Stage.INGESTING):
-        return NODE_INGEST    # retry in-place
+        return NODE_INGEST  # retry in-place
     return NODE_FAIL
 
 
@@ -74,7 +76,11 @@ def after_analyze(state: JobState) -> str:
           which either passes through (HITL off/not-flagged) or pauses the job
           for human review (HITL on and flagged).
     """
-    if not state.analysis.validation_passed and state.can_refine() and state.has_budget(Stage.ANALYZING):
+    if (
+        not state.analysis.validation_passed
+        and state.can_refine()
+        and state.has_budget(Stage.ANALYZING)
+    ):
         logger.info(
             "analysis_refine",
             job_id=state.job_id,
@@ -84,8 +90,11 @@ def after_analyze(state: JobState) -> str:
         return NODE_REFINE
     if not state.analysis.validation_passed:
         # Out of refinement loops. Forward to review gate; graceful degradation.
-        logger.info("analysis_forward_to_review_gate_low_score",
-                    job_id=state.job_id, score=state.analysis.validation_score)
+        logger.info(
+            "analysis_forward_to_review_gate_low_score",
+            job_id=state.job_id,
+            score=state.analysis.validation_score,
+        )
     return NODE_REVIEW_GATE
 
 

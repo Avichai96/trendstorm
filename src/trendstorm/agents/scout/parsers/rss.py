@@ -4,6 +4,7 @@ Each feed entry becomes a titled section in the output text. Entry bodies
 often contain inline HTML (especially Atom `<content>`); we strip that with
 BeautifulSoup so the text store receives clean prose, not markup.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

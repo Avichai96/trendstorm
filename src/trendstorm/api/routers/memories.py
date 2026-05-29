@@ -10,12 +10,13 @@ operation because memories are injected into future analyst contexts.
 Memory pipeline note: episodic and semantic memories are auto-created by the
 memory-consolidation-worker. This router only manages user-curated memories.
 """
+
 from __future__ import annotations
 
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Request, status
-from pydantic import BaseModel, ConfigDict, Field
+from trendstorm_shared import CreateMemoryRequest, MemoryListResponse, MemoryResponse
 
 from trendstorm.api.deps import MongoDep
 from trendstorm.domain.memories.models import Memory, MemoryKind, MemorySource
@@ -36,57 +37,25 @@ router = APIRouter(
 
 
 # ---------------------------------------------------------------------------
-# Schemas
+# Domain → wire-format helper
 # ---------------------------------------------------------------------------
 
-class CreateMemoryRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
 
-    content: str = Field(min_length=1, max_length=4000)
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    tags: list[str] = Field(default_factory=list)
-    curated_by: str = Field(min_length=1, max_length=256)
-
-
-class MemoryResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    tenant_id: str
-    category_id: str
-    kind: str
-    source: str
-    content: str
-    confidence: float
-    is_active: bool
-    tags: list[str]
-    superseded_by: str | None
-    created_at: str
-    updated_at: str
-
-    @classmethod
-    def from_domain(cls, m: Memory) -> "MemoryResponse":
-        return cls(
-            id=m.id,
-            tenant_id=m.tenant_id,
-            category_id=m.category_id,
-            kind=m.kind.value,
-            source=m.source.value,
-            content=m.content,
-            confidence=m.confidence,
-            is_active=m.is_active,
-            tags=m.tags,
-            superseded_by=m.superseded_by,
-            created_at=m.created_at.isoformat(),
-            updated_at=m.updated_at.isoformat(),
-        )
-
-
-class MemoryListResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    items: list[MemoryResponse]
-    total: int
+def _memory_to_response(m: Memory) -> MemoryResponse:
+    return MemoryResponse(
+        id=m.id,
+        tenant_id=m.tenant_id,
+        category_id=m.category_id,
+        kind=m.kind.value,
+        source=m.source.value,
+        content=m.content,
+        confidence=m.confidence,
+        is_active=m.is_active,
+        tags=m.tags,
+        superseded_by=m.superseded_by,
+        created_at=m.created_at,
+        updated_at=m.updated_at,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +98,7 @@ async def create_memory(
     repo = MongoMemoryRepository(mongo)
     await repo.insert(memory)
     logger.info("memory.user_curated.created", memory_id=memory.id, category_id=category_id)
-    return MemoryResponse.from_domain(memory)
+    return _memory_to_response(memory)
 
 
 @router.get(
@@ -146,7 +115,7 @@ async def list_memories(
     repo = MongoMemoryRepository(mongo)
     memories = await repo.list_active_for_category(tenant_id, category_id)
     return MemoryListResponse(
-        items=[MemoryResponse.from_domain(m) for m in memories],
+        items=[_memory_to_response(m) for m in memories],
         total=len(memories),
     )
 

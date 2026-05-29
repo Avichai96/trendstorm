@@ -1,4 +1,5 @@
 """Vectors domain package — VectorHit model and VectorStore Protocol."""
+
 from __future__ import annotations
 
 from trendstorm.domain.vectors.models import VectorHit

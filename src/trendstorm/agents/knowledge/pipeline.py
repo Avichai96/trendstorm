@@ -18,6 +18,7 @@ ChromaDB collection naming (matches VectorStore module docstring):
     f"chunks__{tenant_id[:8].lower()}__{model_id_safe}"
     model_id_safe = model_id with '.' and '-' replaced by '_'
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -44,9 +45,9 @@ class KnowledgeResult:
     """Outcome of a single document's knowledge pipeline run."""
 
     document_id: str
-    n_chunks_created: int    # total chunks written to Mongo (parents + children)
+    n_chunks_created: int  # total chunks written to Mongo (parents + children)
     n_vectors_upserted: int  # child chunks written to ChromaDB
-    skipped: bool            # True if document already had chunks (idempotency hit)
+    skipped: bool  # True if document already had chunks (idempotency hit)
 
 
 def _collection_name(tenant_id: str, model_id: str) -> str:
@@ -166,7 +167,7 @@ class KnowledgePipeline:
                     text=spec.text,
                     token_count=spec.token_count,
                     parent_chunk_id=None,
-                    vector_id=None,        # parents are never embedded
+                    vector_id=None,  # parents are never embedded
                     embedding_model=None,
                     char_start=spec.char_start,
                     char_end=spec.char_end,
@@ -184,7 +185,7 @@ class KnowledgePipeline:
                     text=spec.text,
                     token_count=spec.token_count,
                     parent_chunk_id=parent_cid,
-                    vector_id=None,        # set in step 8 after successful Chroma write
+                    vector_id=None,  # set in step 8 after successful Chroma write
                     embedding_model=self._embed.model_id,
                     char_start=spec.char_start,
                     char_end=spec.char_end,

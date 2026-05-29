@@ -22,6 +22,7 @@ thread_id mapping:
     just: `await graph.ainvoke(state, config={"configurable":
     {"thread_id": job_id}})`.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

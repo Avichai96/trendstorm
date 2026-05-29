@@ -1,4 +1,5 @@
 """Value objects exchanged between callers and LLM providers."""
+
 from __future__ import annotations
 
 from typing import Literal

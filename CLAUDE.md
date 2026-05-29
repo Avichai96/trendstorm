@@ -110,7 +110,7 @@ helm/
 
 ## 2. Current State of the System
 
-TrendStorm is production-ready through Phase 15.5. The full pipeline runs end-to-end with security hardening, human review gating, a versioned Python SDK, a live operator dashboard, and long-term episodic + semantic memory:
+TrendStorm is production-ready through Phase 15.6. The full pipeline runs end-to-end with security hardening, human review gating, a versioned Python SDK, a live operator dashboard, and long-term episodic + semantic memory:
 POST /v1/jobs → orchestrator → scout (SSRF-validated) → knowledge (PII-redacted) → analyst (injection-contained, memory-augmented) → [review gate: approve/reject/refine] → publisher (sanitized) → memory consolidation → SSE delivery.
 
 ### Deployable services (11)
@@ -152,6 +152,7 @@ All phases through 15.5 are complete. For detailed per-phase architecture decisi
 | 14 | Python SDK + shared models package | [phase-14](docs/architecture-history/phase-14-sdk.md) |
 | 15a | Dashboard SPA + HITL review UI | [phase-15a](docs/architecture-history/phase-15a-dashboard.md) |
 | 15.5 | Long-term memory (episodic + semantic) | [phase-15.5](docs/architecture-history/phase-15_5-long-term-memory.md) |
+| 15.6 | Consolidation: schema unification, lint/type clean, dashboard semantic fixes | [phase-15.6](docs/architecture-history/phase-15_6-consolidation.md) |
 
 ### What works end-to-end
 
@@ -160,7 +161,7 @@ All phases through 15.5 are complete. For detailed per-phase architecture decisi
 - `make up-obs` → OTel Collector, Jaeger, Prometheus, Loki, Grafana (trendstorm-overview dashboard)
 - `make up-app` → api + all 11 workers (each exposes `/metrics` on port 9090)
 - Full distributed trace via OTel, Prometheus metrics per stage, structured logs via Loki
-- Test suites: `tests/unit/` (1116 tests, no Docker); `tests/integration/` exercises real infra; `sdk/python/tests/unit/` SDK unit tests (respx mocks)
+- Test suites: `tests/unit/` (1116 tests, no Docker); `tests/integration/` exercises real infra; `sdk/python/tests/unit/` (51 SDK unit tests, respx mocks); `web/dashboard/tests/unit/` (48 dashboard component tests, Vitest + RTL)
 - SSRF validation on every Scout URL (initial + each redirect hop, max 3 hops)
 - Global blocklist loaded from `ops/security/global-blocklist.txt`; per-tenant blocklist in `url_blocklists` collection
 - Chunk content wrapped in `<chunk>` tags with explicit data/instruction boundary rules in analyst prompt
@@ -174,6 +175,7 @@ All phases through 15.5 are complete. For detailed per-phase architecture decisi
 - `Stage.AWAITING_REVIEW` and `Stage.REJECTED` (terminal, distinct from FAILED); `skip_hitl_gate` guard on JobState prevents re-gating after review resolution
 - `/v1/reviews` API (list, get, resolve) gated by `require_role("reviewer")`; `PendingReviewsAgingHigh` alert fires at 80% of SLA
 - Long-term memory: `memory-consolidation-worker` extracts episodic + semantic memories post-publish; `MemoryRetriever` injects top-5 relevant memories into each Analyst context as `<memory>` tags; supersede detection via cosine similarity ≥ 0.92; user-curated memories via `/v1/categories/{id}/memories` (tenant_admin role); `scripts/backfill_memories.py` for existing analyses
+- Phase 15.6 consolidation: all routers import types from `trendstorm-shared` (single wire-format source of truth); `GET /v1/audit` endpoint + `AuditLog` page in dashboard; ruff + mypy strict clean across all source dirs; dashboard pages use actual API field names (`QuotaUsage`, `Job.id`, `Job.failure_message`, correct `JobStatus` enum values); `Page<T>` adapter normalization in all TanStack Query option factories; SDK resolves `trendstorm-shared` via `[tool.uv.sources]` without joining the workspace; `MemoryRepository` Protocol has `exists_for_job`; `EmbeddingBatchResult` correctly used via `.vectors[0]` throughout memory services
 
 ### Architecture Decision Records
 
@@ -193,6 +195,9 @@ Dashboard SPA at `web/dashboard/` — Vite + React 18 + TypeScript strict, Auth0
 ### Phase 15.5 (complete)
 Long-term memory at `src/trendstorm/domain/memories/`, `src/trendstorm/services/memory/`, `src/trendstorm/infrastructure/vectors/chroma_memory_store.py`. Pipeline: PUBLISHING → MEMORY_CONSOLIDATION → COMPLETED. Memory failure is non-blocking — the orchestrator marks COMPLETED regardless. Analyst retrieves top-5 relevant memories via `MemoryRetriever` in parallel with `HybridRetriever`. Supersede detection uses cosine similarity ≥ 0.92 (no LLM). User-curated memories via `/v1/categories/{id}/memories` (tenant_admin). SDK `ts.memories`. Backfill via `scripts/backfill_memories.py`. 1116 unit tests passing.
 
+### Phase 15.6 (complete)
+Consolidation sprint: schema unification, lint/type clean, dashboard semantic correctness. All API routers import shared enums and request/response types from `trendstorm-shared` — SDK, server, and dashboard now share a single wire-format source of truth. `GET /v1/audit` endpoint added with cursor pagination; `AuditLog` dashboard page renders event history. Ruff + mypy strict passes clean across all source dirs; global ignores added for B008 (FastAPI idiomatic defaults), S106 (redact token false-positives), S110/SIM105 (intentional fire-and-forget metric blocks per Rule 53). Dashboard TypeScript: all phantom field references removed — `Job.id` (not `job_id`), `Job.failure_message` (not `error_message`), correct `JobStatus` enum values (no `ingested`/`embedded`), `QuotaUsage` with real fields, `Page<T>` adapter normalization in all TanStack Query factories. SDK resolves `trendstorm-shared` via `[tool.uv.sources]` without joining the workspace. `MemoryRepository` Protocol gains `exists_for_job`; memory services use `EmbeddingBatchResult.vectors[0]` correctly. `require_tenant` wired to jobs + sources routers. 1116 Python unit tests + 51 SDK unit tests + 48 dashboard component tests all green; TypeScript type check clean.
+
 ### Phase 15b (next — not started)
 Dashboard write paths: category/source creation, API key management UI. Auth0 Action setup wizard.
 
@@ -203,7 +208,6 @@ Multi-region deployment + data residency (ADR 001 trigger conditions), infrastru
 - **RetryingChatProvider**: `RetryingEmbeddingProvider` covers embeddings; consider an equivalent wrapper for transient errors on the Analyst hot path (separate from Kafka-level retry which is too coarse for multi-step LLM flows). Runbook [llm-rate-limit.md](ops/runbooks/llm-rate-limit.md) calls this out as prevention.
 - **Kafka consumer lag metric**: `BaseConsumer` does not yet update `METRICS.kafka_consumer_lag` gauge — each worker needs to call it on every poll cycle with its current lag.
 - **ChromaDB health gauge**: `trendstorm_vector_store_health` is only set at startup. Workers that use ChromaDB should refresh it on a 30s interval via a background task.
-- **Apply `require_tenant` to jobs + sources routers**: Phase 5 only applied the OpenAPI documentation dependency to categories.
 - **`frozen=True`** on remaining nested Settings models for consistency.
 - **`test_create_job_drives_to_completed`** remains skipped — orchestrator-only fixture can't drive to COMPLETED without all workers; `test_full_pipeline_with_sse.py` is now the canonical full-stack regression.
 - **`scripts/smoke_test.py`** Mongo session test has Motor API drift (`TypeError: object AsyncClientSession can't be used in 'await' expression`). Fix when next touching the smoke script.

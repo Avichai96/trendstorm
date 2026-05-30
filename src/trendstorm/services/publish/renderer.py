@@ -63,8 +63,8 @@ class RenderEngine:
 
         Returns raw PDF bytes.
         """
-        import markdown as md_lib  # type: ignore[import-untyped]
-        import weasyprint  # type: ignore[import-untyped]
+        import markdown as md_lib
+        import weasyprint
 
         from trendstorm.infrastructure.security.sanitize import sanitize_text
 

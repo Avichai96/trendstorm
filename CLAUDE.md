@@ -15,7 +15,7 @@
 - **Hexagonal architecture** — `domain/` defines Protocols; `infrastructure/` implements them; `services/` composes use cases; `api/` is the FastAPI HTTP layer; `agents/` and `orchestration/` hold the LangGraph pipeline.
 - **Thin state, fat store** — LangGraph `JobState` carries references (IDs, blob URIs), never bulk payloads. Real content lives in Mongo / MinIO / ChromaDB.
 - **At-least-once Kafka + idempotency keys + LangGraph checkpoints → effective exactly-once user view.**
-- **Multi-tenant from day one** — every collection (except `idempotency`) has `tenant_id`; every index starts with `tenant_id`; every repository query funnels through `_tenant_query()`.
+- **Multi-tenant from day one** — most collections have `tenant_id`; every index on tenant-scoped collections starts with `tenant_id`; every tenant-scoped repository query funnels through `_tenant_query()`. Root entities (`users`, `tenants/organizations`, token tables) are intentionally global — see Rule 69.
 
 ### Tech stack (locked in)
 - **Python 3.12+**, `uv` for deps & venv, `pyproject.toml` (PEP 621).
@@ -93,10 +93,12 @@ web/
     src/components/jobs/ PipelineProgress
     src/components/reviews/ SlaCountdown, DecisionForm
     src/components/reports/ MarkdownViewer, CitationPanel
+    src/components/categories/ CategoryForm (create/edit dialog)
+    src/components/sources/ SourceForm, DeleteSourceConfirm
     src/hooks/           useSSE, useTenant
     src/lib/             utils, sse (fetch-based SSE client)
     src/pages/           Categories, CategoryDetail, Jobs, JobDetail, JobReport
-                         Reviews, ReviewDetail, Usage, AuditLog
+                         Reviews, ReviewDetail, Usage, AuditLog, ApiKeys, Settings
     tests/unit/          Vitest + RTL component tests + axe a11y
     tests/e2e/           Playwright (login, jobs, reviews)
 helm/
@@ -110,10 +112,10 @@ helm/
 
 ## 2. Current State of the System
 
-TrendStorm is production-ready through Phase 15.6. The full pipeline runs end-to-end with security hardening, human review gating, a versioned Python SDK, a live operator dashboard, and long-term episodic + semantic memory:
+TrendStorm is production-ready through Phase 16. The full pipeline runs end-to-end with security hardening, human review gating, a versioned Python SDK, a live operator dashboard, long-term episodic + semantic memory, and full self-service auth & registration:
 POST /v1/jobs → orchestrator → scout (SSRF-validated) → knowledge (PII-redacted) → analyst (injection-contained, memory-augmented) → [review gate: approve/reject/refine] → publisher (sanitized) → memory consolidation → SSE delivery.
 
-### Deployable services (11)
+### Deployable services (12)
 
 | Service | Purpose | Scaling signal |
 |---|---|---|
@@ -128,10 +130,11 @@ POST /v1/jobs → orchestrator → scout (SSRF-validated) → knowledge (PII-red
 | outbox-relay-worker | Mongo outbox → Kafka | 1-2 replicas (Recreate) |
 | review-timeout-worker | Auto-expire pending reviews past SLA | N/A (single replica Recreate) |
 | memory-consolidation-worker | Episodic + semantic memory extraction | Kafka lag |
+| account-purge-worker | GDPR hard-delete for tombstoned accounts | N/A (single replica Recreate) |
 
 ### Phase completion history
 
-All phases through 15.5 are complete. For detailed per-phase architecture decisions, see [docs/architecture-history/](docs/architecture-history/).
+All phases through 16 are complete. For detailed per-phase architecture decisions, see [docs/architecture-history/](docs/architecture-history/).
 
 | Phase | Title | Doc |
 |---|---|---|
@@ -153,15 +156,17 @@ All phases through 15.5 are complete. For detailed per-phase architecture decisi
 | 15a | Dashboard SPA + HITL review UI | [phase-15a](docs/architecture-history/phase-15a-dashboard.md) |
 | 15.5 | Long-term memory (episodic + semantic) | [phase-15.5](docs/architecture-history/phase-15_5-long-term-memory.md) |
 | 15.6 | Consolidation: schema unification, lint/type clean, dashboard semantic fixes | [phase-15.6](docs/architecture-history/phase-15_6-consolidation.md) |
+| 16 | Self-service auth & registration | [phase-16](docs/architecture-history/phase-16-self-service-auth.md) |
+| 15b | Dashboard write paths: category/source/API key management | N/A |
 
 ### What works end-to-end
 
 - `make up` → infra (Mongo replica set, Kafka KRaft, Redis, ChromaDB, MinIO, Ollama)
-- `make seed-indexes` → all Mongo indexes (idempotent, includes `audit_log`, `url_blocklists`, `memories`)
+- `make seed-indexes` → all Mongo indexes (idempotent, includes `audit_log`, `url_blocklists`, `memories`, `users`, `memberships`, `invites`, `email_verifications`, `password_resets`, `refresh_sessions`)
 - `make up-obs` → OTel Collector, Jaeger, Prometheus, Loki, Grafana (trendstorm-overview dashboard)
-- `make up-app` → api + all 11 workers (each exposes `/metrics` on port 9090)
+- `make up-app` → api + all 12 workers (each exposes `/metrics` on port 9090)
 - Full distributed trace via OTel, Prometheus metrics per stage, structured logs via Loki
-- Test suites: `tests/unit/` (1116 tests, no Docker); `tests/integration/` exercises real infra; `sdk/python/tests/unit/` (51 SDK unit tests, respx mocks); `web/dashboard/tests/unit/` (48 dashboard component tests, Vitest + RTL)
+- Test suites: `tests/unit/` (1167 tests, no Docker); `tests/integration/` exercises real infra; `sdk/python/tests/unit/` (51 SDK unit tests, respx mocks); `web/dashboard/tests/unit/` (65 dashboard component tests, Vitest + RTL)
 - SSRF validation on every Scout URL (initial + each redirect hop, max 3 hops)
 - Global blocklist loaded from `ops/security/global-blocklist.txt`; per-tenant blocklist in `url_blocklists` collection
 - Chunk content wrapped in `<chunk>` tags with explicit data/instruction boundary rules in analyst prompt
@@ -175,7 +180,9 @@ All phases through 15.5 are complete. For detailed per-phase architecture decisi
 - `Stage.AWAITING_REVIEW` and `Stage.REJECTED` (terminal, distinct from FAILED); `skip_hitl_gate` guard on JobState prevents re-gating after review resolution
 - `/v1/reviews` API (list, get, resolve) gated by `require_role("reviewer")`; `PendingReviewsAgingHigh` alert fires at 80% of SLA
 - Long-term memory: `memory-consolidation-worker` extracts episodic + semantic memories post-publish; `MemoryRetriever` injects top-5 relevant memories into each Analyst context as `<memory>` tags; supersede detection via cosine similarity ≥ 0.92; user-curated memories via `/v1/categories/{id}/memories` (tenant_admin role); `scripts/backfill_memories.py` for existing analyses
-- Phase 15.6 consolidation: all routers import types from `trendstorm-shared` (single wire-format source of truth); `GET /v1/audit` endpoint + `AuditLog` page in dashboard; ruff + mypy strict clean across all source dirs; dashboard pages use actual API field names (`QuotaUsage`, `Job.id`, `Job.failure_message`, correct `JobStatus` enum values); `Page<T>` adapter normalization in all TanStack Query option factories; SDK resolves `trendstorm-shared` via `[tool.uv.sources]` without joining the workspace; `MemoryRepository` Protocol has `exists_for_job`; `EmbeddingBatchResult` correctly used via `.vectors[0]` throughout memory services
+- Phase 15.6 consolidation: all routers import types from `trendstorm-shared` (single wire-format source of truth); `GET /v1/audit` endpoint + `AuditLog` page in dashboard; ruff + mypy strict clean across all source dirs; dashboard pages use actual API field names (`QuotaUsage`, `Job.id`, `Job.failure_message`, correct `JobStatus` enum values); `Page<T>` adapter normalization in all TanStack Query option factories
+- Phase 16 self-service auth: `POST /v1/auth/signup` → `RegistrationService` (creates User + Org + Membership in one Mongo transaction, IdP account created outside the transaction with compensating delete on failure). `POST /v1/auth/login` → `SessionService` (short-lived HS256 JWT + 30-day refresh token stored server-side in Redis + Mongo). Token lifecycle owned by us: invite tokens (7d), email verification tokens (24h), password reset tokens (1h) all use 32-byte random → SHA-256 hash in Mongo, plaintext in email. GDPR: `account_purge_worker` hard-deletes tombstoned accounts 30 days after `schedule_deletion`. 1167 unit tests passing (51 new Phase 16 service tests).
+- Phase 15b dashboard write paths: `CategoryForm` (create/edit) wired to "New Category" button on `Categories.tsx` and Edit/Archive/Unarchive actions on `CategoryDetail.tsx`. `SourceForm` + `DeleteSourceConfirm` wired to "Add Source" and per-source Trash buttons on `CategoryDetail.tsx`. `ApiKeys.tsx` page — list/create/revoke with one-time plaintext key reveal dialog. `Settings.tsx` page — Auth0 Post-Login Action setup guide. Both new pages added to `App.tsx` lazy routes and `Sidebar.tsx` nav. `DELETE /v1/sources/{id}` (soft-disable via `enabled=False`) added to backend. 65 dashboard unit tests passing (17 new — CategoryForm, SourceForm, ApiKeys).
 
 ### Architecture Decision Records
 
@@ -198,10 +205,13 @@ Long-term memory at `src/trendstorm/domain/memories/`, `src/trendstorm/services/
 ### Phase 15.6 (complete)
 Consolidation sprint: schema unification, lint/type clean, dashboard semantic correctness. All API routers import shared enums and request/response types from `trendstorm-shared` — SDK, server, and dashboard now share a single wire-format source of truth. `GET /v1/audit` endpoint added with cursor pagination; `AuditLog` dashboard page renders event history. Ruff + mypy strict passes clean across all source dirs; global ignores added for B008 (FastAPI idiomatic defaults), S106 (redact token false-positives), S110/SIM105 (intentional fire-and-forget metric blocks per Rule 53). Dashboard TypeScript: all phantom field references removed — `Job.id` (not `job_id`), `Job.failure_message` (not `error_message`), correct `JobStatus` enum values (no `ingested`/`embedded`), `QuotaUsage` with real fields, `Page<T>` adapter normalization in all TanStack Query factories. SDK resolves `trendstorm-shared` via `[tool.uv.sources]` without joining the workspace. `MemoryRepository` Protocol gains `exists_for_job`; memory services use `EmbeddingBatchResult.vectors[0]` correctly. `require_tenant` wired to jobs + sources routers. 1116 Python unit tests + 51 SDK unit tests + 48 dashboard component tests all green; TypeScript type check clean.
 
-### Phase 15b (next — not started)
-Dashboard write paths: category/source creation, API key management UI. Auth0 Action setup wizard.
+### Phase 16 (complete)
+Self-service auth & registration. New domain models: `User` (root, not tenant-scoped), `Organization` (id==tenant_id, uses `Collection.TENANTS`), `Membership` (join table), `Invite`, `EmailVerification`, `PasswordReset`, `RefreshSession`. Six services in `services/auth/`: `RegistrationService`, `SessionService`, `InvitationService`, `PasswordResetService`, `EmailVerificationService`, `AccountDeletionService`. Infrastructure: `Auth0Provider` (IdentityProvider Protocol) + `PostmarkProvider`/`DevEmailProvider` (EmailProvider Protocol). Five new routers: `/v1/auth/*`, `/v1/users/me`, `/v1/organizations`, `/v1/memberships`, `/v1/invites`. `account_purge_worker` polls hourly for tombstoned users past their `purge_at` and hard-deletes (single-replica Recreate). Key non-obvious decisions: IdP account creation happens outside the Mongo transaction; compensating delete handles rollback; password hashes never touch our DB (Auth0 owns them); refresh tokens stored server-side in Redis (O(1) revocation) + Mongo (audit). 51 new unit tests (in-memory fakes, no Docker). 1167 unit tests total.
 
-### Phase 16 (not started)
+### Phase 15b (complete)
+Dashboard write paths. `CategoryForm` dialog (create/edit, with name/description/keywords fields) wired to Categories.tsx and CategoryDetail.tsx. `SourceForm` dialog (register source with URL/label/type) + `DeleteSourceConfirm` (soft-disable) wired to CategoryDetail.tsx. `ApiKeys.tsx` page: list active/revoked keys, create with name, revoke with confirmation, one-time plaintext key reveal dialog with copy button. `Settings.tsx` page: Auth0 Post-Login Action setup guide with copy-ready JS code. Backend: `DELETE /v1/sources/{id}` endpoint (soft-delete via `enabled=False`, `SourceRepository.disable` method). New components under `src/components/categories/` and `src/components/sources/`. Both new pages in sidebar nav and lazy router. 65 dashboard unit tests (17 new). TypeScript strict clean.
+
+### Phase 17 (not started)
 Multi-region deployment + data residency (ADR 001 trigger conditions), infrastructure-as-code (**Terraform**), Velero backups.
 
 ### Pending polish items
@@ -419,7 +429,7 @@ Multi-region deployment + data residency (ADR 001 trigger conditions), infrastru
 
 68. **`record_llm_cost` persists to the cost ledger via fire-and-forget.** Callers pass `job_id` + `ledger` to `record_llm_cost`; the function schedules `loop.create_task(_write())` if a running event loop exists. Ledger write failure is caught and logged — NEVER propagated. Prometheus metrics are always updated regardless of ledger write success. The ledger is for billing reconciliation; Prometheus is for operational alerting.
 
-69. **`tenants` and `api_keys` collections are exempt from the "unique indexes must start with `tenant_id`" rule.** `tenants` IS the root entity (no outer `tenant_id` to scope by). `api_keys__key_hash_unique` is global because key lookup happens before we know the tenant. Both are listed in `GLOBAL_OK` in `tests/unit/test_indexes.py`. No other collection should be added to `GLOBAL_OK` without explicit discussion.
+69. **Some collections are exempt from the "unique indexes must start with `tenant_id`" rule.** All are listed in `GLOBAL_OK` in `tests/unit/test_indexes.py`. Current exempt set: `tenants` (IS the root entity), `api_keys` (key lookup precedes auth), `users` (root entity — one account per email globally, Phase 16), `invites` + `email_verifications` + `password_resets` + `refresh_sessions` (token-hash lookup always precedes knowing the tenant, Phase 16). Do not add a collection to `GLOBAL_OK` without explicit architectural justification; every other collection MUST start its unique indexes with `tenant_id`.
 
 70. **`BusinessRuleError(code="quota_exceeded")` → HTTP 402.** The error handler in `api/error_handlers.py` checks `exc.code` specifically. Other `BusinessRuleError` codes map to 400. When adding new business rule errors that should return specific HTTP codes, extend the handler's `elif isinstance(exc, BusinessRuleError)` branch rather than creating new exception subclasses.
 
@@ -522,6 +532,26 @@ Multi-region deployment + data residency (ADR 001 trigger conditions), infrastru
 114. **`Analyst` stores `_memory_final_k` at init time, passed as `memory_final_k=settings.memory.memory_final_k`.** Do NOT use `AnalysisSettings.memory_final_k` — that field does not exist. `MemorySettings.memory_final_k` is a separate config namespace (`MEMORY__MEMORY_FINAL_K`). The analyst worker passes both when constructing `Analyst(...)`.
 
 115. **User-curated memories (`source=USER_CURATED`) are subject to the same supersede logic as extracted ones.** A future automated extraction that scores ≥ 0.92 similarity will supersede a user-curated memory. This is intentional: extracted facts from actual analyses should take precedence over manually injected priors. Users who want a pinned fact should re-curate after supersede.
+
+### Phase 16 — Self-service auth & registration conventions
+
+116. **Auth0 (IdP) owns password hashes; our domain owns the token lifecycle.** Auth0 stores and validates passwords. Our `PasswordResetService`, `EmailVerificationService`, and `InvitationService` own their respective tokens (32-byte random → SHA-256 hash in Mongo, plaintext in email). Never store password hashes in our Mongo collections. Never call Auth0's built-in reset email — our `PostmarkProvider` sends the branded email, and consuming the token calls `IdentityProvider.set_password()`.
+
+117. **IdP account creation happens OUTSIDE the Mongo transaction; compensating delete handles rollback.** `RegistrationService.create_account` calls `IdentityProvider.create_user()` before starting the Mongo session. If the Mongo transaction fails, a best-effort `IdentityProvider.delete_user()` rolls back the IdP account. This is the correct order: the IdP call is not transactional, so putting it inside a Mongo transaction would leave orphaned IdP accounts if the transaction commit failed after the IdP call.
+
+118. **`User` is a root entity — NOT tenant-scoped.** `MongoUserRepository` does NOT subclass `TenantScopedRepository` and does NOT call `_tenant_query()`. A user can belong to multiple organizations. All user operations go through the user's `id` or `email`. `users__email_unique` is a globally unique index (enforced across all tenants). This is the third documented exception to Rule 3 (after `idempotency` and the review sweeper's cross-tenant list).
+
+119. **`Organization.id == tenant_id` throughout the codebase.** The `Organization` class uses `Collection.TENANTS` (the collection remains "tenants" to avoid a data migration from the earlier `Tenant` model). `Organization.tenant_id` is a property that returns `self.id`. New code MUST use `Organization`; the old `Tenant` model in `domain/auth/models.py` exists only for backward compatibility.
+
+120. **Server-side refresh tokens: Redis for fast revocation, Mongo for audit trail.** `SessionService.issue_session()` writes the refresh token hash to both `rt:{hash}` in Redis (primary lookup, O(1) delete on revoke) and a `RefreshSession` document in Mongo (audit trail, "list my active sessions" UI). `refresh_session()` atomically deletes the Redis key and stamps `revoked_at` in Mongo before issuing a new token. Revocation is single-writer (one Redis DEL) — there's no race.
+
+121. **Token pattern is the same as API keys: 32-byte random → SHA-256 hex stored, plaintext in email.** `generate_token()` → `secrets.token_urlsafe(32)`; `hash_token(t)` → `hashlib.sha256(t.encode()).hexdigest()`. Both live in `services/auth/token_utils.py`. Applies to invite tokens (7d), email verification tokens (24h), password reset tokens (1h), and refresh tokens (30d). NEVER store plaintext tokens in Mongo.
+
+122. **`account_purge_worker` deploys as single replica (`strategy: Recreate`).** It's a polling sweeper (same pattern as `review_timeout_worker`). Two replicas don't corrupt data (`hard_delete` is idempotent) but would double-log and double-call the IdP delete. Default poll interval: 3600s (1 hour). `list_due_for_purge()` is a cross-tenant Mongo query (the fourth documented exception to Rule 3, after `idempotency`, review sweeper, and `iter_completed`).
+
+123. **`Membership` is the only join between `User` and `Organization`.** A user's access to a tenant is determined entirely by their `Membership` record. `Role` values: `OWNER`, `ADMIN`, `MEMBER`, `REVIEWER`, `VIEWER`. Membership deletion (on purge or explicit leave) cascades nothing — the org and its data survive. The sole-owner purge edge case: transfer to another admin, or mark org orphaned if no admins exist.
+
+124. **Password reset rate-limiting uses Redis pipeline (4 commands per request).** `PasswordResetService._check_rate_limits()` runs `INCR email_key`, `EXPIRE email_key`, `INCR ip_key`, `EXPIRE ip_key` in a single pipeline. Both limits checked together before any user lookup — fail fast on rate limit without a Mongo round-trip. Limits: 5/hr per email, 10/hr per IP. Email verification rate-limiting uses a simpler single `INCR` + `EXPIRE` (3/hr per user_id).
 
 ---
 

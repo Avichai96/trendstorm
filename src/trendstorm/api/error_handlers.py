@@ -27,10 +27,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from trendstorm.shared.errors import (
+    AuthenticationError,
+    AuthorizationError,
     BusinessRuleError,
     ConflictError,
     ExternalServiceError,
     NotFoundError,
+    RateLimitError,
     TrendStormError,
     ValidationError,
 )
@@ -55,7 +58,13 @@ def _envelope(error: dict[str, Any]) -> dict[str, Any]:
 
 async def domain_error_handler(_: Request, exc: TrendStormError) -> JSONResponse:
     """Map TrendStormError subclasses to appropriate HTTP statuses."""
-    if isinstance(exc, NotFoundError):
+    if isinstance(exc, AuthenticationError):
+        http_status = status.HTTP_401_UNAUTHORIZED
+    elif isinstance(exc, AuthorizationError):
+        http_status = status.HTTP_403_FORBIDDEN
+    elif isinstance(exc, RateLimitError):
+        http_status = status.HTTP_429_TOO_MANY_REQUESTS
+    elif isinstance(exc, NotFoundError):
         http_status = status.HTTP_404_NOT_FOUND
     elif isinstance(exc, (DomainValidationError, ValidationError)):
         http_status = status.HTTP_422_UNPROCESSABLE_CONTENT

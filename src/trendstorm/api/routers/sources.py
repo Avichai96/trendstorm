@@ -112,3 +112,18 @@ async def list_sources(
         enabled_only=enabled_only,
     )
     return SourceListResponse(sources=[_to_response(s) for s in sources])
+
+
+@router.delete(
+    "/{source_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def disable_source(
+    request: Request,
+    source_id: Annotated[str, Path(min_length=26, max_length=26)],
+    service: SourceServiceDep,
+) -> None:
+    await service.disable_source(
+        tenant_id=request.state.tenant_id,
+        source_id=source_id,
+    )

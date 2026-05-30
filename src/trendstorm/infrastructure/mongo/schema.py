@@ -18,8 +18,18 @@ class Collection(StrEnum):
     """Canonical Mongo collection names."""
 
     # ---- Auth (multi-tenant identity) ----
+    # TENANTS collection stores Organization documents. The name "tenants" is
+    # kept to avoid migrating existing documents. organization_id == tenant_id.
     TENANTS = "tenants"
     API_KEYS = "api_keys"
+
+    # ---- User identity (Phase 16) ----
+    USERS = "users"
+    MEMBERSHIPS = "memberships"
+    INVITES = "invites"
+    EMAIL_VERIFICATIONS = "email_verifications"
+    PASSWORD_RESETS = "password_resets"  # noqa: S105
+    REFRESH_SESSIONS = "refresh_sessions"
 
     # ---- User-curated (long-lived) ----
     CATEGORIES = "categories"

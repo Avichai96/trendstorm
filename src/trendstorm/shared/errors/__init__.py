@@ -15,15 +15,25 @@ Hierarchy:
     │   │   └── LLMSchemaError       structured output parse failed
     │   ├── DatabaseError            Mongo/Redis failure
     │   └── BrokerError              Kafka failure
-    └── BusinessRuleError            policy violation
+    ├── BusinessRuleError            policy violation
+    │   ├── SignupNotAllowedError     SIGNUP_MODE policy rejected (Phase 16)
+    │   └── RateLimitError           per-user/IP rate limit exceeded → 429 (Phase 16)
+    └── AuthenticationError          invalid/expired credentials → 401 (Phase 16)
+        ├── TokenExpiredError        invite/reset/verify token expired
+        ├── TokenUsedError           single-use token already consumed
+        └── AuthorizationError      insufficient permissions → 403 (Phase 16)
 
 Why a hierarchy?
     - HTTP layer can map exception types to status codes:
-        NotFoundError       -> 404
-        ValidationError     -> 422
-        ConflictError       -> 409
-        ExternalServiceError-> 503
-        TrendStormError     -> 500
+        NotFoundError         -> 404
+        ValidationError       -> 422
+        ConflictError         -> 409
+        ExternalServiceError  -> 503
+        AuthenticationError   -> 401
+        AuthorizationError    -> 403
+        RateLimitError        -> 429
+        BusinessRuleError     -> 400 (or 402 for quota_exceeded)
+        TrendStormError       -> 500
     - Catch blocks can be specific without listing every concrete type.
     - Domain code raises domain exceptions; infrastructure code raises
       infra exceptions; the API layer maps both to HTTP.
@@ -204,3 +214,56 @@ class ParseError(ExternalServiceError):
 class BlobError(ExternalServiceError):
     default_code = "blob_error"
     default_message = "Blob storage operation failed."
+
+
+# --- Auth errors (Phase 16) -------------------------------------------------
+
+
+class AuthenticationError(TrendStormError):
+    """Invalid credentials — wrong password, revoked token, expired token, etc.
+
+    Maps to HTTP 401. Use `code` to distinguish sub-cases:
+        invalid_credentials, expired_token, invalid_token,
+        token_used, account_deleted.
+    """
+
+    default_code = "authentication_error"
+    default_message = "Authentication failed."
+
+
+class AuthorizationError(TrendStormError):
+    """Insufficient permissions for the requested operation. Maps to HTTP 403."""
+
+    default_code = "authorization_error"
+    default_message = "Insufficient permissions."
+
+
+class TokenExpiredError(AuthenticationError):
+    """Invite, password-reset, or email-verification token has expired."""
+
+    default_code = "token_expired"
+    default_message = "Token has expired."
+
+
+class TokenUsedError(AuthenticationError):
+    """Single-use token has already been consumed."""
+
+    default_code = "token_used"
+    default_message = "Token has already been used."
+
+
+class SignupNotAllowedError(BusinessRuleError):
+    """Signup rejected by SIGNUP_MODE policy (invite_only or closed)."""
+
+    default_code = "signup_not_allowed"
+    default_message = "Signup is not allowed with the current policy."
+
+
+class RateLimitError(BusinessRuleError):
+    """Request rate limit exceeded. Maps to HTTP 429.
+
+    The `context` dict includes `retry_after_seconds` when available.
+    """
+
+    default_code = "rate_limit_exceeded"
+    default_message = "Too many requests. Please try again later."

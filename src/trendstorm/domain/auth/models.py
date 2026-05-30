@@ -83,6 +83,7 @@ class AuthContext(BaseModel):
     Downstream handlers read `tenant_id` from this; they never touch raw
     headers or JWT claims directly.
 
+    user_id: set for JWT/session auth (Phase 16+); None for API key auth.
     roles: propagated from ApiKey.roles (key auth) or the JWT "roles" claim
     (JWT auth). Empty list = standard access. `require_role()` dependency checks this.
     """
@@ -90,7 +91,8 @@ class AuthContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tenant_id: str
+    user_id: str | None = None  # None for API-key-only auth; set for session auth
     key_id: str | None = None  # set when authenticated via API key
-    subject: str | None = None  # JWT `sub` claim when authenticated via JWT
+    subject: str | None = None  # JWT `sub` claim (Auth0 sub or user_id for local JWTs)
     source: AuthSource = "legacy"  # how auth was established
-    roles: list[str] = Field(default_factory=list)  # e.g. ["reviewer"]
+    roles: list[str] = Field(default_factory=list)  # e.g. ["reviewer", "owner"]

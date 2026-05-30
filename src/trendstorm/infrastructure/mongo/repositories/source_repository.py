@@ -104,3 +104,11 @@ class MongoSourceRepository(TenantScopedRepository[Source]):
             )
         except PyMongoError as e:
             raise_db_error(e, operation="update_fetch_status", source_id=source_id)
+
+    async def disable(self, tenant_id: str, source_id: str) -> Source | None:
+        doc = await self._coll.find_one_and_update(
+            self._tenant_query(tenant_id, _id=source_id),
+            {"$set": {"enabled": False, "updated_at": now_utc()}},
+            return_document=True,
+        )
+        return self._decode(doc) if doc else None

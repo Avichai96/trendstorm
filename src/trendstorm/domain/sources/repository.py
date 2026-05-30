@@ -50,3 +50,7 @@ class SourceRepository(Protocol):
     ) -> None:
         """Record the most recent fetch outcome. Called by Scout."""
         ...
+
+    async def disable(self, tenant_id: str, source_id: str) -> Source | None:
+        """Soft-delete: set enabled=False. Returns updated source or None if not found."""
+        ...

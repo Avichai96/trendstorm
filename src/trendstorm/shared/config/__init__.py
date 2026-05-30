@@ -427,6 +427,91 @@ class MemorySettings(BaseSettings):
 
 
 # ---------------------------------------------------------------------------
+# Phase 16 settings
+# ---------------------------------------------------------------------------
+
+
+class Auth0Settings(BaseSettings):
+    """Auth0 tenant configuration for Phase 16 self-service auth.
+
+    Two Auth0 applications are required:
+      1. Regular Web Application (client_id/client_secret) — end-user flows.
+      2. Machine-to-Machine (management_client_id/secret) — Management API
+         with scopes: read:users, update:users, delete:users, create:users.
+
+    ENV pattern: AUTH0__DOMAIN, AUTH0__CLIENT_ID, etc.
+    """
+
+    model_config = SettingsConfigDict(frozen=True)
+
+    domain: str = ""  # e.g. "my-tenant.us.auth0.com"
+    client_id: str = ""
+    client_secret: SecretStr = Field(default=SecretStr(""))
+    audience: str = ""  # API identifier, e.g. "https://api.trendstorm.ai"
+    management_client_id: str = ""
+    management_client_secret: SecretStr = Field(default=SecretStr(""))
+    database_connection: str = "Username-Password-Authentication"
+
+
+class EmailSettings(BaseSettings):
+    """Email delivery configuration.
+
+    provider: "postmark" (production) or "dev" (stdout/in-memory, tests).
+    """
+
+    model_config = SettingsConfigDict(frozen=True)
+
+    provider: str = "dev"
+    postmark_server_token: SecretStr = Field(default=SecretStr(""))
+    from_email: str = "noreply@trendstorm.ai"
+    from_name: str = "TrendStorm"
+    # Base URL for links in emails (verify, reset, invite). No trailing slash.
+    app_base_url: str = "http://localhost:5173"
+
+
+class JWTSettings(BaseSettings):
+    """JWT signing configuration for short-lived access tokens.
+
+    HS256 for now; document upgrade path to RS256 with key rotation in
+    ops/runbooks/auth-incident.md.
+    """
+
+    model_config = SettingsConfigDict(frozen=True)
+
+    secret: SecretStr = Field(
+        default=SecretStr("change-me-in-production"),
+        description="HS256 signing secret. Must be >=32 random bytes in production.",
+    )
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = Field(default=15, ge=1, le=60)
+    refresh_token_expire_days: int = Field(default=30, ge=1, le=90)
+
+
+class SignupSettings(BaseSettings):
+    """Global signup policy.
+
+    signup_mode: invite_only | open | closed.
+    allowlist_domains: if set, emails matching these domains bypass the
+        invite requirement in invite_only mode (e.g. "@yourcompany.com").
+    account_deletion_grace_days: days before the purge sweeper hard-deletes
+        a tombstoned user. Defaults to 30 (GDPR-compliant window).
+    """
+
+    model_config = SettingsConfigDict(frozen=True)
+
+    signup_mode: str = "invite_only"
+    allowlist_domains: list[str] = Field(default_factory=list)
+    account_deletion_grace_days: int = Field(default=30, ge=1, le=365)
+
+    @field_validator("allowlist_domains", mode="before")
+    @classmethod
+    def _split_csv(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [d.strip() for d in v.split(",") if d.strip()]
+        return v
+
+
+# ---------------------------------------------------------------------------
 # Root settings — composes all subsystems
 # ---------------------------------------------------------------------------
 
@@ -468,6 +553,10 @@ class Settings(BaseSettings):
     auth: AuthSettings = Field(default_factory=AuthSettings)
     hitl: HitlSettings = Field(default_factory=HitlSettings)
     memory: MemorySettings = Field(default_factory=MemorySettings)
+    auth0: Auth0Settings = Field(default_factory=Auth0Settings)
+    email: EmailSettings = Field(default_factory=EmailSettings)
+    jwt: JWTSettings = Field(default_factory=JWTSettings)
+    signup: SignupSettings = Field(default_factory=SignupSettings)
 
     @classmethod
     def settings_customise_sources(

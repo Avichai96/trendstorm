@@ -144,3 +144,16 @@ class SourceService:
             category_id,
             enabled_only=enabled_only,
         )
+
+    async def disable_source(
+        self,
+        *,
+        tenant_id: str,
+        source_id: str,
+    ) -> None:
+        """Soft-delete a source (set enabled=False). Raises NotFoundError if missing."""
+        with tracer.start_as_current_span("source.disable"):
+            result = await self._sources.disable(tenant_id, source_id)
+            if result is None:
+                raise NotFoundError(f"Source {source_id} not found")
+            logger.info("source.disabled", tenant_id=tenant_id, source_id=source_id)

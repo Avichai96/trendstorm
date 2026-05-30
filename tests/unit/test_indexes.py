@@ -51,11 +51,25 @@ class TestIndexRegistry:
         Exception: collections that are intentionally global, like
         `idempotency` (keyed by an opaque string).
         """
-        # Intentionally global collections:
+        # Intentionally global collections (Phase 16 additions noted):
         # - IDEMPOTENCY: keyed by opaque string, no tenant scope
         # - TENANTS: is the root entity; there is no outer tenant_id to scope by
         # - API_KEYS: key_hash_unique must be global — lookup precedes auth
-        GLOBAL_OK = {Collection.IDEMPOTENCY, Collection.TENANTS, Collection.API_KEYS}  # noqa: N806  # constant defined inside test method
+        # - USERS: root entity (not tenant-scoped); one account per email globally
+        # - INVITES: token_hash lookup precedes knowing the tenant
+        # - EMAIL_VERIFICATIONS: token_hash lookup precedes knowing the tenant
+        # - PASSWORD_RESETS: token_hash lookup precedes knowing the tenant
+        # - REFRESH_SESSIONS: token_hash lookup precedes knowing the tenant
+        GLOBAL_OK = {  # noqa: N806  # constant defined inside test method
+            Collection.IDEMPOTENCY,
+            Collection.TENANTS,
+            Collection.API_KEYS,
+            Collection.USERS,
+            Collection.INVITES,
+            Collection.EMAIL_VERIFICATIONS,
+            Collection.PASSWORD_RESETS,
+            Collection.REFRESH_SESSIONS,
+        }
 
         for idx in INDEXES:
             if not idx.unique:

@@ -274,3 +274,56 @@ groups:
             Requests will queue and latency will spike. Scale connection pool or
             investigate slow queries holding connections.
           runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/mongo-pool.md"
+
+  # --------------------------------------------------------------------------
+  # Auth & registration (Phase 16)
+  # --------------------------------------------------------------------------
+  - name: auth
+    rules:
+      - alert: LoginFailureRateHigh
+        expr: |
+          rate(trendstorm_logins_total{status="failed"}[5m]) > 2
+        for: 5m
+        labels:
+          severity: page
+          team: platform
+        annotations:
+          summary: "Login failure rate elevated — possible credential stuffing"
+          description: |
+            Failed password logins at {{ $value | printf "%.1f" }}/s (threshold: 2/s) over
+            the last 5 minutes. This may indicate a credential stuffing or brute-force
+            attack. Check auth logs for source IPs; consider enabling IP-based rate
+            limiting or temporarily switching SIGNUP_MODE=closed.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/auth-incident.md"
+
+      - alert: AccountPurgeWorkerStalled
+        expr: |
+          increase(trendstorm_account_deletions_scheduled_total[24h]) > 0
+          unless
+          increase(trendstorm_account_deletions_scheduled_total[24h]) < 0
+        for: 0m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Account purge worker may be stalled"
+          description: |
+            Accounts have been scheduled for deletion but the purge counter has not
+            incremented recently. If purge_at timestamps have elapsed, the
+            account_purge_worker may be down or failing. Check worker logs.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/auth-incident.md"
+
+      - alert: SignupRateSpike
+        expr: |
+          rate(trendstorm_signups_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Signup rate spike — possible abuse or bot registration"
+          description: |
+            Signup rate is {{ $value | printf "%.1f" }}/s, which may indicate bot
+            registration or an invite token being shared publicly. Review recent
+            signups and consider switching SIGNUP_MODE to invite_only.
+          runbook: "https://github.com/trendstorm/runbooks/blob/main/ops/runbooks/auth-incident.md"

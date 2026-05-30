@@ -136,6 +136,166 @@ INDEXES: list[IndexSpec] = [
         partial_filter_expression={"revoked_at": None},
     ),
     # =======================================================================
+    # tenants — add slug uniqueness (Phase 16: Organization.slug)
+    # =======================================================================
+    IndexSpec(
+        collection=Collection.TENANTS,
+        keys=[("slug", ASCENDING)],
+        name="tenants__slug_unique",
+        unique=True,
+        sparse=True,  # sparse because legacy Tenant rows don't have slug
+    ),
+    # =======================================================================
+    # users — top-level identity (Phase 16)
+    # =======================================================================
+    # Case-insensitive email uniqueness: collation handled at the seeder level
+    # (IndexSpec doesn't support collation; seeder passes collation= kwarg directly
+    # for this index only). Name is canonical — seeder matches by name.
+    IndexSpec(
+        collection=Collection.USERS,
+        keys=[("email", ASCENDING)],
+        name="users__email_unique",
+        unique=True,
+    ),
+    # Purge sweeper: "find users due for hard delete."
+    IndexSpec(
+        collection=Collection.USERS,
+        keys=[("purge_at", ASCENDING)],
+        name="users__purge_at",
+        sparse=True,  # most users have purge_at=None
+    ),
+    # Auth0 subject lookup (OAuth login: "do we have this user already?").
+    IndexSpec(
+        collection=Collection.USERS,
+        keys=[("identity_provider_subject", ASCENDING)],
+        name="users__idp_subject",
+        sparse=True,  # None until IdP account is linked
+        unique=True,
+    ),
+    # =======================================================================
+    # memberships — user ↔ org links (Phase 16)
+    # =======================================================================
+    # Primary: one membership per (org, user).
+    IndexSpec(
+        collection=Collection.MEMBERSHIPS,
+        keys=[("tenant_id", ASCENDING), ("user_id", ASCENDING)],
+        name="memberships__tenant_user_unique",
+        unique=True,
+    ),
+    # "What orgs is this user in?" — for org-switcher and account purge.
+    IndexSpec(
+        collection=Collection.MEMBERSHIPS,
+        keys=[("user_id", ASCENDING)],
+        name="memberships__user_id",
+    ),
+    # "Who are the admins of this org?" — for ownership transfer.
+    IndexSpec(
+        collection=Collection.MEMBERSHIPS,
+        keys=[("tenant_id", ASCENDING), ("roles", ASCENDING)],
+        name="memberships__tenant_roles",
+    ),
+    # =======================================================================
+    # invites — pending email invitations (Phase 16)
+    # =======================================================================
+    # Token lookup is public (accept/preview before login).
+    IndexSpec(
+        collection=Collection.INVITES,
+        keys=[("token_hash", ASCENDING)],
+        name="invites__token_hash_unique",
+        unique=True,
+    ),
+    # One pending invite per email per org (partial on unaccepted+unrevoked).
+    IndexSpec(
+        collection=Collection.INVITES,
+        keys=[("tenant_id", ASCENDING), ("email", ASCENDING)],
+        name="invites__tenant_email_pending_unique",
+        unique=True,
+        partial_filter_expression={"accepted_at": None, "revoked_at": None},
+    ),
+    # TTL: auto-clean expired invites 7 days after expiry.
+    IndexSpec(
+        collection=Collection.INVITES,
+        keys=[("expires_at", ASCENDING)],
+        name="invites__expires_at_ttl",
+        expire_after_seconds=7 * _SECONDS_PER_DAY,
+    ),
+    # List pending invites for a tenant (management UI).
+    IndexSpec(
+        collection=Collection.INVITES,
+        keys=[("tenant_id", ASCENDING), ("_id", DESCENDING)],
+        name="invites__tenant_id",
+    ),
+    # =======================================================================
+    # email_verifications — short-lived verification tokens (Phase 16)
+    # =======================================================================
+    IndexSpec(
+        collection=Collection.EMAIL_VERIFICATIONS,
+        keys=[("token_hash", ASCENDING)],
+        name="email_verifications__token_hash_unique",
+        unique=True,
+    ),
+    IndexSpec(
+        collection=Collection.EMAIL_VERIFICATIONS,
+        keys=[("user_id", ASCENDING)],
+        name="email_verifications__user_id",
+    ),
+    # TTL: 7 days from creation (token window is 24h; extra buffer for cleanup).
+    IndexSpec(
+        collection=Collection.EMAIL_VERIFICATIONS,
+        keys=[("created_at", ASCENDING)],
+        name="email_verifications__ttl_created",
+        expire_after_seconds=7 * _SECONDS_PER_DAY,
+    ),
+    # =======================================================================
+    # password_resets — 1-hour short-lived reset tokens (Phase 16)
+    # =======================================================================
+    IndexSpec(
+        collection=Collection.PASSWORD_RESETS,
+        keys=[("token_hash", ASCENDING)],
+        name="password_resets__token_hash_unique",
+        unique=True,
+    ),
+    IndexSpec(
+        collection=Collection.PASSWORD_RESETS,
+        keys=[("user_id", ASCENDING)],
+        name="password_resets__user_id",
+    ),
+    # TTL: 2 hours (generous buffer; token window is 1h).
+    IndexSpec(
+        collection=Collection.PASSWORD_RESETS,
+        keys=[("created_at", ASCENDING)],
+        name="password_resets__ttl_created",
+        expire_after_seconds=2 * 3600,
+    ),
+    # =======================================================================
+    # refresh_sessions — long-lived refresh token audit log (Phase 16)
+    # =======================================================================
+    IndexSpec(
+        collection=Collection.REFRESH_SESSIONS,
+        keys=[("refresh_token_hash", ASCENDING)],
+        name="refresh_sessions__token_hash_unique",
+        unique=True,
+    ),
+    IndexSpec(
+        collection=Collection.REFRESH_SESSIONS,
+        keys=[("user_id", ASCENDING), ("last_used_at", DESCENDING)],
+        name="refresh_sessions__user_last_used",
+    ),
+    # Active sessions for revoke-all on password reset / account deletion.
+    IndexSpec(
+        collection=Collection.REFRESH_SESSIONS,
+        keys=[("user_id", ASCENDING)],
+        name="refresh_sessions__user_active",
+        partial_filter_expression={"revoked_at": None},
+    ),
+    # TTL: auto-clean expired sessions 7 days after expiry.
+    IndexSpec(
+        collection=Collection.REFRESH_SESSIONS,
+        keys=[("expires_at", ASCENDING)],
+        name="refresh_sessions__expires_at_ttl",
+        expire_after_seconds=7 * _SECONDS_PER_DAY,
+    ),
+    # =======================================================================
     # categories — user-curated trend topics
     # =======================================================================
     # Query: "list this tenant's categories, newest first."

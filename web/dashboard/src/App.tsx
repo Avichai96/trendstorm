@@ -14,6 +14,8 @@ const Reviews = lazy(() => import("@/pages/Reviews"));
 const ReviewDetail = lazy(() => import("@/pages/ReviewDetail"));
 const Usage = lazy(() => import("@/pages/Usage"));
 const AuditLog = lazy(() => import("@/pages/AuditLog"));
+const ApiKeys = lazy(() => import("@/pages/ApiKeys"));
+const Settings = lazy(() => import("@/pages/Settings"));
 
 function PageFallback() {
   return (
@@ -106,6 +108,22 @@ export default function App() {
                   <AuditLog />
                 </Suspense>
               </RoleGuard>
+            }
+          />
+          <Route
+            path="api-keys"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <ApiKeys />
+              </Suspense>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <Settings />
+              </Suspense>
             }
           />
           <Route path="*" element={<Navigate to="/categories" replace />} />

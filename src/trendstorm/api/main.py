@@ -51,14 +51,19 @@ from trendstorm.api.middleware.request_logging import RequestLoggingMiddleware
 from trendstorm.api.middleware.tenant import TenantMiddleware
 from trendstorm.api.routers import api_keys as api_keys_router
 from trendstorm.api.routers import audit as audit_router
+from trendstorm.api.routers import auth as auth_router
 from trendstorm.api.routers import categories as categories_router
 from trendstorm.api.routers import health as health_router
+from trendstorm.api.routers import invites as invites_router
 from trendstorm.api.routers import jobs as jobs_router
+from trendstorm.api.routers import memberships as memberships_router
 from trendstorm.api.routers import memories as memories_router
 from trendstorm.api.routers import metrics as metrics_router
+from trendstorm.api.routers import organizations as organizations_router
 from trendstorm.api.routers import quota as quota_router
 from trendstorm.api.routers import reviews as reviews_router
 from trendstorm.api.routers import sources as sources_router
+from trendstorm.api.routers import users as users_router
 from trendstorm.infrastructure.blob.minio_client import MinioClient
 from trendstorm.infrastructure.kafka.producer import KafkaProducerClient
 from trendstorm.infrastructure.llm.registry import build_embedding_provider
@@ -257,6 +262,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ---- Routers ----------------------------------------------------------
     app.include_router(health_router.router)
     app.include_router(metrics_router.router)
+    app.include_router(auth_router.router)
+    app.include_router(users_router.router)
+    app.include_router(organizations_router.router)
+    app.include_router(memberships_router.router)
+    app.include_router(invites_router.router)
     app.include_router(categories_router.router)
     app.include_router(sources_router.router)
     app.include_router(jobs_router.router)

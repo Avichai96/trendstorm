@@ -907,6 +907,93 @@ class _TrendStormMetrics:
             )
         )
 
+        # ---- Phase 16: auth + registration metrics ---------------------
+        # Bounded labels only. Raw email/user_id never appear as labels.
+
+        self.signups = (
+            Counter(
+                "trendstorm_signups_total",
+                "Total successful account signups.",
+                labelnames=["method", "mode"],  # method=password|google|github, mode=open|invite_only
+                registry=registry,
+            )
+            if registry is not None
+            else Counter(
+                "trendstorm_signups_total",
+                "Total successful account signups.",
+                labelnames=["method", "mode"],
+            )
+        )
+
+        self.logins = (
+            Counter(
+                "trendstorm_logins_total",
+                "Total login attempts.",
+                labelnames=["method", "status"],  # status=success|failed
+                registry=registry,
+            )
+            if registry is not None
+            else Counter(
+                "trendstorm_logins_total",
+                "Total login attempts.",
+                labelnames=["method", "status"],
+            )
+        )
+
+        self.invites_sent = (
+            Counter(
+                "trendstorm_invites_sent_total",
+                "Total invitations sent.",
+                registry=registry,
+            )
+            if registry is not None
+            else Counter(
+                "trendstorm_invites_sent_total",
+                "Total invitations sent.",
+            )
+        )
+
+        self.invites_accepted = (
+            Counter(
+                "trendstorm_invites_accepted_total",
+                "Total invitations accepted.",
+                registry=registry,
+            )
+            if registry is not None
+            else Counter(
+                "trendstorm_invites_accepted_total",
+                "Total invitations accepted.",
+            )
+        )
+
+        self.password_resets_requested = (
+            Counter(
+                "trendstorm_password_resets_requested_total",
+                "Total password reset requests.",
+                labelnames=["status"],  # status=rate_limited|sent
+                registry=registry,
+            )
+            if registry is not None
+            else Counter(
+                "trendstorm_password_resets_requested_total",
+                "Total password reset requests.",
+                labelnames=["status"],
+            )
+        )
+
+        self.account_deletions_scheduled = (
+            Counter(
+                "trendstorm_account_deletions_scheduled_total",
+                "Total accounts scheduled for deletion.",
+                registry=registry,
+            )
+            if registry is not None
+            else Counter(
+                "trendstorm_account_deletions_scheduled_total",
+                "Total accounts scheduled for deletion.",
+            )
+        )
+
 
 # ---------------------------------------------------------------------------
 # Module-level singleton

@@ -9,6 +9,8 @@ import {
   ClipboardList,
   DollarSign,
   ShieldAlert,
+  Key,
+  Settings,
   LogOut,
 } from "lucide-react";
 import { TenantSelector } from "./TenantSelector";
@@ -26,6 +28,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/reviews", label: "Reviews", icon: ClipboardList, role: "reviewer" },
   { to: "/usage", label: "Usage", icon: DollarSign },
   { to: "/audit", label: "Audit Log", icon: ShieldAlert, role: "admin" },
+  { to: "/api-keys", label: "API Keys", icon: Key },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {

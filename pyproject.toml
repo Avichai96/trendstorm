@@ -62,6 +62,7 @@ dependencies = [
     # --- Metrics ---
     "prometheus-client>=0.21.0,<1.0",          # Prometheus exposition format + metric types
     "python-jose[cryptography]>=3.3.0,<4.0",
+    "PyJWT>=2.8,<3.0",
 ]
 
 # ------------------------------------------------------------------------------
@@ -223,6 +224,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["google.genai.*", "pysbd.*", "chromadb.*", "tiktoken.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["markdown.*", "weasyprint.*", "jose.*"]
 ignore_missing_imports = true
 
 # ------------------------------------------------------------------------------

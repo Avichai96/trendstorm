@@ -21,8 +21,8 @@ Multiple IdP support:
 from __future__ import annotations
 
 import httpx
-from jose import JWTError, jwt  # type: ignore[import-untyped]
-from jose.exceptions import ExpiredSignatureError  # type: ignore[import-untyped]
+from jose import JWTError, jwt
+from jose.exceptions import ExpiredSignatureError
 
 from trendstorm.shared.errors import TrendStormError
 from trendstorm.shared.logging import get_logger
